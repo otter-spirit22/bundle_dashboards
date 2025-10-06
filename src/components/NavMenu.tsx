@@ -1,3 +1,4 @@
+// src/components/NavMenu.tsx
 import React from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 
@@ -23,7 +24,7 @@ export default function NavMenu() {
 
   return (
     <nav className="flex items-center gap-2">
-      {/* Primary links */}
+      {/* Primary links (desktop) */}
       <div className="hidden md:flex flex-wrap gap-2">
         {primary.map((item) => (
           <Link
@@ -37,9 +38,14 @@ export default function NavMenu() {
 
         {/* Explore dropdown (desktop) */}
         <div className="relative group">
-          <button className="badge border-white/20">Explore ▾</button>
-          <div className="invisible group-hover:visible opacity-0 group-hover:opacity-100 transition
-                          absolute right-0 z-40 mt-2 w-56 rounded-xl border border-white/10 bg-zinc-900/95 p-2 shadow-xl">
+          <button type="button" className="badge border-white/20">
+            Explore ▾
+          </button>
+          <div
+            className="invisible opacity-0 group-hover:visible group-hover:opacity-100 transition
+                       absolute right-0 z-40 mt-2 w-56 rounded-xl border border-white/10
+                       bg-zinc-900/95 p-2 shadow-xl"
+          >
             {explore.map((item) => (
               <Link
                 key={item.to}
@@ -55,4 +61,21 @@ export default function NavMenu() {
         </div>
       </div>
 
-      {/* Compact selector (m*
+      {/* Compact selector (mobile) */}
+      <div className="md:hidden">
+        <select
+          className="rounded bg-white/10 px-2 py-1 text-sm"
+          value={pathname.startsWith("/") ? pathname : "/"}
+          onChange={(e) => navigate(e.target.value)}
+        >
+          <option value="/">Home</option>
+          {[...primary, ...explore].map((item) => (
+            <option key={item.to} value={item.to}>
+              {item.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    </nav>
+  );
+}
