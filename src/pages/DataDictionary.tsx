@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { CORE_METRICS, INSIGHTS_50, CATEGORIES, type Category } from "@/data/DataDictionary";
+import { CORE_METRICS, INSIGHTS_50, CATEGORIES, type Category } from "@/data/dictionary";
 
 function CategoryPill({
   cat,
