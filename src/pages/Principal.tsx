@@ -8,45 +8,44 @@ import InsightsHeatmap from "../components/InsightsHeatmap";
 import { mockMetrics, mockInsights } from "../data/mock";
 import { bands } from "../config/benchmarks";
 
-// If you already have a proper loader + builder, replace these two shims:
-type UploadedRow = any;
+// ---- Types & window shims ----
+type UploadedRow = Record<string, any>;
+
 declare global {
   interface Window {
     __BB_METRICS__?: any;
     __BB_ROWS__?: UploadedRow[];
-    __BB_INSIGHTS__?: any[]; // optional precomputed insights
+    __BB_INSIGHTS__?: HeatmapInsight[];
   }
 }
 
-function useMetrics() {
-  const anyWin = (window as any).__BB_METRICS__;
-  return anyWin || mockMetrics;
-}
+type InsightCategory = "Growth Opportunities" | "Retention Radar" | "Service Drain" | "Risk & Compliance";
 
-// OPTIONAL: if you have a real hook, e.g. useUploadedRows(), import and use that instead
-function useUploadedRows(): UploadedRow[] {
-  return (window as any).__BB_ROWS__ || [];
-}
-
-// Minimal “builder” shim to convert your rows OR mock to heatmap-friendly items.
-// Replace with your real compute (1..50 insights) when ready.
-import { InsightCategory } from "../data/insightCategories";
 type HeatmapInsight = {
   id: number;                // 1..50
   title: string;
   household_id?: string;
-  detection_date?: string;   // ISO date (use renewal_date or today)
+  detection_date?: string;   // ISO date
   category: InsightCategory;
   severity: "good" | "opportunity" | "warn" | "urgent";
 };
 
-function fallbackBuildInsightsFromRows(rows: UploadedRow[]): HeatmapInsight[] {
-  // 1) Use any precomputed insights if provided
-  const pre = (window as any).__BB_INSIGHTS__ as HeatmapInsight[] | undefined;
-  if (pre && Array.isArray(pre) && pre.length) return pre;
+// ---- Data hooks ----
+function useMetrics() {
+  return window.__BB_METRICS__ || mockMetrics;
+}
 
-  // 2) Otherwise synthesize a tiny demo set from rows or from mockInsights
-  const todayISO = new Date().toISOString();
+function useUploadedRows(): UploadedRow[] {
+  return window.__BB_ROWS__ || [];
+}
+
+// ---- Lightweight fallback builder for heatmap demo ----
+function fallbackBuildInsightsFromRows(rows: UploadedRow[]): HeatmapInsight[] {
+  // Prefer precomputed insights if present
+  if (Array.isArray(window.__BB_INSIGHTS__) && window.__BB_INSIGHTS__!.length) {
+    return window.__BB_INSIGHTS__!;
+  }
+
   const sampleTitles = [
     "Bundling Gap",
     "Umbrella Opportunity",
@@ -66,13 +65,13 @@ function fallbackBuildInsightsFromRows(rows: UploadedRow[]): HeatmapInsight[] {
     "warn",
   ];
 
-  const base: HeatmapInsight[] = [];
+  const items: HeatmapInsight[] = [];
   const N = Math.max(rows.length || 50, 12);
+
   for (let i = 0; i < Math.min(N, 80); i++) {
-    // Evenly distribute into next 12 months
     const d = new Date();
-    d.setMonth(d.getMonth() + (i % 12));
-    base.push({
+    d.setMonth(d.getMonth() + (i % 12)); // spread across 12 months
+    items.push({
       id: ((i % 4) + 1) as number,
       title: sampleTitles[i % sampleTitles.length],
       household_id: rows[i]?.household_id || `HH-${i + 1}`,
@@ -81,13 +80,14 @@ function fallbackBuildInsightsFromRows(rows: UploadedRow[]): HeatmapInsight[] {
       severity: sampleSev[i % sampleSev.length],
     });
   }
-  return base;
+  return items;
 }
 
+// ---- Page ----
 export default function Principal() {
   const m = useMetrics();
   const rows = useUploadedRows();
-  const heatmapInsights: HeatmapInsight[] = fallbackBuildInsightsFromRows(rows);
+  const heatmapData = fallbackBuildInsightsFromRows(rows);
 
   return (
     <div className="mx-auto max-w-6xl p-6 space-y-4">
@@ -128,16 +128,14 @@ export default function Principal() {
         <Spark label="Tenure Momentum (sim)" points={[6.4, 6.5, 6.6, 6.7, 6.8]} />
       </div>
 
-      {/* NEW: Upcoming Insights Heatmap */}
+      {/* Upcoming Insights Heatmap */}
       <InsightsHeatmap
-        data={heatmapInsights}
+        data={heatmapData}
         months={12}
         defaultCategories={[]}
         onMonthClick={(bin) => {
-          // hook this to your detail modal/drawer:
-          // e.g., open a right-side drawer showing bin.items by category
-          console.log("Clicked month bin:", bin);
-          // TODO: setOpenMonth(bin)
+          // Wire this to open a modal/drawer listing bin.items
+          console.log("Heatmap month clicked:", bin);
         }}
       />
 
