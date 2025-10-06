@@ -10,7 +10,6 @@ import AccountManager from './pages/AccountManager';
 
 // NEW PAGES
 import Insights50 from './pages/Insights50';
-import Opportunities from './pages/Opportunities';
 import About from './pages/About';
 import Pricing from './pages/Pricing';
 import Insights from './pages/Insights'; // optional
@@ -22,7 +21,6 @@ const router = createBrowserRouter([
   { path: '/account-manager', element: <AccountManager /> },
 
   // New routes
-  { path: '/Opportunities', element: <Opportunities/> },
   { path: '/about', element: <About /> },
   { path: '/pricing', element: <Pricing /> },
   { path: '/insights', element: <Insights /> },
