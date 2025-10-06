@@ -10,8 +10,8 @@ export default function App() {
         </h1>
 
         <nav className="flex gap-2">
-          <Link className="badge border-white/20" to="/principal">
-            Opportunities
+          <Link className="badge border-white/20" to="/insights-50">
+            50 Insights
             </Link>
           <Link className="badge border-white/20" to="/principal">
             Principal
