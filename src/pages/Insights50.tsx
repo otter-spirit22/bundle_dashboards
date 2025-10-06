@@ -1,5 +1,31 @@
 import React, { useMemo, useRef, useState } from "react";
 import Papa from "papaparse";
+export default function Insights50() {
+  const [filters, setFilters] = React.useState<FilterState>({
+    category: "All",
+    tags: [],
+    query: "",
+  });
+
+  const filtered = filterInsights(filters);
+
+  return (
+    <div className="mx-auto max-w-6xl p-6">
+      <header className="mb-6">
+        <h1 className="text-2xl font-extrabold uppercase text-indigo-300">Insights 50</h1>
+        <p className="text-white/70">Explore all fifty Bundle Bench insights.</p>
+      </header>
+
+      {/* ⬇️ PLACE FILTER BAR HERE */}
+      <FilterBar value={filters} onChange={setFilters} showTags />
+
+      {/* ⬇️ Your cards/grid go here */}
+      <div className="grid gap-3 md:grid-cols-2">
+        {/* map filtered results */}
+      </div>
+    </div>
+  );
+}
 
 /** ---------- Helpers & Types ---------- */
 type Row = Record<string, any>;
