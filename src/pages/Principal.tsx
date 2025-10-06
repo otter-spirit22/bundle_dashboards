@@ -164,8 +164,16 @@ export default function Principal() {
           twoCardsOnly
           categories={catFilter.length ? catFilter : undefined}
           onWindowClick={(bin) => {
-            // wire to a modal/drawer if you like
-            console.log("Window clicked:", bin);
+            setSelectedBin({
+              label: bin.label,
+              items: bin.items,
+            });
+            setOpen(true);
+          }}
+          onItemClick={(it) => {
+            // Optional: open household in same modal or navigate
+            const hh = encodeURIComponent(it.household_id || "");
+            window.location.href = `/household/${hh}?insight=${it.id}`;
           }}
         />
       </div>
@@ -187,3 +195,4 @@ export default function Principal() {
     </div>
   );
 }
+
