@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { CORE_METRICS, INSIGHTS_50, CATEGORIES, type Category } from "@/data/datadictionary";
+import { CORE_METRICS, INSIGHTS_50, CATEGORIES, type Category } from "@/data/DataDictionary";
 
 function CategoryPill({
   cat,
@@ -186,7 +186,7 @@ const cards = [
 ];
 
 // Updated component:
-export default function DataDictionary() {
+export default function () {
   return (
     <div className="mx-auto max-w-5xl p-6 space-y-6">
       <h1 className="text-2xl font-extrabold text-indigo-300">Data Dictionary</h1>
