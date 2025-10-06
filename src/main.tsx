@@ -7,7 +7,7 @@ import App from './App';
 import Principal from './pages/Principal';
 import Producer from './pages/Producer';
 import AccountManager from './pages/AccountManager';
-
+import DataDictionary from './pages/DataDictionary';
 // NEW PAGES
 import Insights50 from './pages/Insights50';
 import About from './pages/About';
@@ -19,7 +19,7 @@ const router = createBrowserRouter([
   { path: '/principal', element: <Principal /> },
   { path: '/producer', element: <Producer /> },
   { path: '/account-manager', element: <AccountManager /> },
-
+  { path: '/data-dictionary', element: <DataDictionary /> },
   // New routes
   { path: '/about', element: <About /> },
   { path: '/pricing', element: <Pricing /> },
