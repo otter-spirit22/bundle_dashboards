@@ -1,36 +1,102 @@
 // src/pages/Household.tsx
 import React from "react";
+import { useLocation, useParams, Link } from "react-router-dom";
 import { getRows, getInsights } from "../stores";
 
+type Row = Record<string, any>;
+
 export default function Household() {
-  const rows = getRows();
-  const insights = getInsights();
+  const { id } = useParams();                  // supports /household/:id
+  const { search } = useLocation();
+  const qs = new URLSearchParams(search);
 
-  const params = new URLSearchParams(location.search);
-  const hh = params.get("hh");
+  // support both styles: ?hh=... and /household/:id
+  const hh = (id || qs.get("hh") || "").toString();
+  const selectedInsight = qs.get("insight");   // optional insight id to highlight
 
-  const current = rows.filter((r: Record<string, any>) => String(r.household_id) === String(hh));
-  const mine = insights.filter((i) => i.household_id === hh);
+  const rows: Row[] = (getRows && getRows()) || [];
+  const insights: any[] = (getInsights && getInsights()) || [];
+
+  const current = React.useMemo(
+    () => rows.filter((r) => String(r.household_id) === hh),
+    [rows, hh]
+  );
+
+  const mine = React.useMemo(
+    () => insights.filter((i) => String(i.household_id) === hh),
+    [insights, hh]
+  );
 
   return (
     <div className="mx-auto max-w-4xl p-6 space-y-4">
-      <h1 className="text-xl font-bold">Household {hh || "—"}</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-extrabold text-indigo-300">
+          Household {hh || "—"}
+        </h1>
+        <Link to="/principal" className="badge border-white/20">Back</Link>
+      </div>
+
+      {selectedInsight && (
+        <div className="card border border-indigo-400/40 p-4">
+          <div className="mb-1 text-xs uppercase text-indigo-300 tracking-wide">Linked Insight</div>
+          <div className="font-semibold">
+            #{selectedInsight}
+          </div>
+          <div className="text-xs text-slate-400">
+            Opened from calendar link. Scroll the Insights list below to see all.
+          </div>
+        </div>
+      )}
 
       <div className="card p-4">
-        <h2 className="font-semibold mb-2">Records</h2>
-        <pre className="text-xs overflow-auto">{JSON.stringify(current, null, 2)}</pre>
+        <h2 className="mb-2 font-semibold">Records</h2>
+        {current.length > 0 ? (
+          <pre className="text-xs overflow-auto">{JSON.stringify(current, null, 2)}</pre>
+        ) : (
+          <div className="text-sm text-slate-400">No rows found for this household.</div>
+        )}
       </div>
 
       <div className="card p-4">
-        <h2 className="font-semibold mb-2">Insights</h2>
-        <ul className="list-disc ml-5 text-sm">
-          {mine.map((i, idx) => (
-            <li key={idx}>
-              #{i.id} {i.title} • {i.category} • {i.severity}
-            </li>
-          ))}
-          {mine.length === 0 && <li className="text-slate-400">No insights.</li>}
-        </ul>
+        <h2 className="mb-2 font-semibold">Insights</h2>
+        {mine.length > 0 ? (
+          <ul className="space-y-1">
+            {mine.map((i, idx) => {
+              const isSelected = selectedInsight && String(i.id) === selectedInsight;
+              return (
+                <li
+                  key={idx}
+                  className={`rounded px-2 py-1 text-sm ${
+                    isSelected ? "bg-indigo-500/20 border border-indigo-400/40" : "bg-white/5"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">
+                        #{i.id} {i.title}
+                      </div>
+                      <div className="truncate text-xs text-slate-400">
+                        {i.category} • {i.severity}
+                      </div>
+                    </div>
+                    {/* Deep-link back to this page preserving the format */}
+                    <Link
+                      className="badge border-white/20 ml-2"
+                      to={`/household/${encodeURIComponent(hh)}?insight=${encodeURIComponent(
+                        i.id
+                      )}`}
+                      title="Permalink"
+                    >
+                      Link
+                    </Link>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <div className="text-sm text-slate-400">No insights.</div>
+        )}
       </div>
     </div>
   );
