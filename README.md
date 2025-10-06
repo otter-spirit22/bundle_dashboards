@@ -1,0 +1,1 @@
+# Bundle Bench — Role Dashboards (Demo-Ready)\n\nSee /principal, /producer, /account-manager. Upload CSV/XLSX from the top nav.\n\n## Install\n```bash\nnpm i\nnpm run dev\n```\n
