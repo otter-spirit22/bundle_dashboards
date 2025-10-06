@@ -1,13 +1,16 @@
+// src/pages/Producer.tsx
 import React from "react";
 import type { UploadedRow, HeatmapInsight, InsightCategory } from "../types/insights";
+import HorizontalInsightCarousel from "../components/HorizontalInsightCarousel";
 
-// --- lightweight hooks that work before data is uploaded ---
+/** ---- lightweight hooks that work before data is uploaded ---- */
 function useRows(): UploadedRow[] {
-  return window.__BB_ROWS__ || [];
+  return (window as any).__BB_ROWS__ || [];
 }
 function useInsights(): HeatmapInsight[] {
-  if (Array.isArray(window.__BB_INSIGHTS__) && window.__BB_INSIGHTS__!.length) {
-    return window.__BB_INSIGHTS__!;
+  const w = window as any;
+  if (Array.isArray(w.__BB_INSIGHTS__) && w.__BB_INSIGHTS__!.length) {
+    return w.__BB_INSIGHTS__!;
   }
   // small fallback so page renders
   const demo: HeatmapInsight[] = Array.from({ length: 24 }).map((_, i) => {
@@ -33,8 +36,8 @@ function useInsights(): HeatmapInsight[] {
   return demo;
 }
 
-// sort: more urgent first, then nearest date
-const SEV_ORDER: HeatmapInsight["severity"][] = ["good", "opportunity", "warn", "urgent"];
+/** sort: most urgent first, then nearest date */
+const SEV_ORDER: HeatmapInsight["severity"][] = ["urgent", "warn", "opportunity", "good"];
 const sevRank = (s: HeatmapInsight["severity"]) => SEV_ORDER.indexOf(s);
 
 export default function Producer() {
@@ -52,7 +55,7 @@ export default function Producer() {
       const uniq = Array.from(
         new Set(
           rows
-            .map((r) => String(r[foundKey] ?? "").trim())
+            .map((r) => String((r as any)[foundKey] ?? "").trim())
             .filter((v) => v.length > 0)
         )
       );
@@ -79,8 +82,8 @@ export default function Producer() {
     const map = new Map<string, string>();
     if (foundKey) {
       rows.forEach((r) => {
-        const hh = String(r.household_id ?? "");
-        const mgr = String(r[foundKey] ?? "Unassigned");
+        const hh = String((r as any).household_id ?? "");
+        const mgr = String((r as any)[foundKey] ?? "Unassigned");
         if (hh) map.set(hh, mgr);
       });
     } else {
@@ -95,9 +98,10 @@ export default function Producer() {
     return map;
   }, [rows, insights, derivedManagers]);
 
+  // ---- Upcoming (next 60 days) list for the manager & category chips ----
   const upcoming = React.useMemo(() => {
     const today = new Date();
-    const end = new Date(today.getTime() + 60 * 24 * 60 * 60 * 1000); // next 60 days
+    const end = new Date(today.getTime() + 60 * 24 * 60 * 60 * 1000);
     return insights
       .filter(
         (i) =>
@@ -108,13 +112,51 @@ export default function Producer() {
           (hhToManager.get(String(i.household_id ?? "")) ?? "Unassigned") === manager
       )
       .sort((a, b) => {
-        const sv = sevRank(b.severity) - sevRank(a.severity);
+        // urgent->warn->opportunity->good
+        const sv = sevRank(a.severity) - sevRank(b.severity);
+        if (sv !== 0) return sv;
+        const ad = a.detection_date ? new Date(a.detection_date).getTime() : Number.MAX_SAFE_INTEGER;
+        const bd = b.detection_date ? new Date(b.detection_date).getTime() : Number.MAX_SAFE_INTEGER;
+        return ad - bd; // sooner first
+      });
+  }, [insights, hhToManager, manager, cats]);
+
+  // ---- Top 10 Growth & Retention for this manager (most urgent upcoming first) ----
+  const top10Growth = React.useMemo(() => {
+    const today = new Date();
+    return insights
+      .filter((i) => {
+        const owned = (hhToManager.get(String(i.household_id ?? "")) ?? "Unassigned") === manager;
+        const isFuture = i.detection_date ? new Date(i.detection_date) >= today : false;
+        return owned && i.category === "Growth Opportunities" && isFuture;
+      })
+      .sort((a, b) => {
+        const sv = sevRank(a.severity) - sevRank(b.severity);
         if (sv !== 0) return sv;
         const ad = a.detection_date ? new Date(a.detection_date).getTime() : Number.MAX_SAFE_INTEGER;
         const bd = b.detection_date ? new Date(b.detection_date).getTime() : Number.MAX_SAFE_INTEGER;
         return ad - bd;
-      });
-  }, [insights, hhToManager, manager, cats]);
+      })
+      .slice(0, 10);
+  }, [insights, hhToManager, manager]);
+
+  const top10Retention = React.useMemo(() => {
+    const today = new Date();
+    return insights
+      .filter((i) => {
+        const owned = (hhToManager.get(String(i.household_id ?? "")) ?? "Unassigned") === manager;
+        const isFuture = i.detection_date ? new Date(i.detection_date) >= today : false;
+        return owned && i.category === "Retention Radar" && isFuture;
+      })
+      .sort((a, b) => {
+        const sv = sevRank(a.severity) - sevRank(b.severity);
+        if (sv !== 0) return sv;
+        const ad = a.detection_date ? new Date(a.detection_date).getTime() : Number.MAX_SAFE_INTEGER;
+        const bd = b.detection_date ? new Date(b.detection_date).getTime() : Number.MAX_SAFE_INTEGER;
+        return ad - bd;
+      })
+      .slice(0, 10);
+  }, [insights, hhToManager, manager]);
 
   return (
     <div className="mx-auto max-w-6xl p-6 space-y-4">
@@ -160,7 +202,7 @@ export default function Producer() {
           </button>
         </div>
 
-        {/* Count + list */}
+        {/* Count + list (Upcoming) */}
         <div className="rounded-lg bg-white/5 p-4">
           <div className="mb-2 flex items-start justify-between">
             <div className="font-semibold">Upcoming (next 60 days)</div>
@@ -170,8 +212,8 @@ export default function Producer() {
           <div className="max-h-80 overflow-auto space-y-2">
             {upcoming.map((it, idx) => (
               <a
-                key={idx}
-                href={`/household?hh=${encodeURIComponent(it.household_id || "")}&id=${it.id}`}
+                key={`${it.household_id ?? ""}-${it.id}-${idx}`}
+                href={`/household?hh=${encodeURIComponent(it.household_id ?? "")}&id=${it.id}`}
                 className="block rounded bg-white/5 p-2 hover:bg-white/10"
               >
                 <div className="text-sm font-medium">
@@ -189,6 +231,17 @@ export default function Producer() {
           </div>
         </div>
       </div>
+
+      {/* ---- Top 10 horizontal carousels ---- */}
+      <HorizontalInsightCarousel
+        title="Top 10 Growth Opportunities"
+        items={top10Growth}
+      />
+
+      <HorizontalInsightCarousel
+        title="Top 10 Retention Radar"
+        items={top10Retention}
+      />
     </div>
   );
 }
