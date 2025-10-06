@@ -1,4 +1,4 @@
-// src/data/datadictionary.ts
+// src/data/DataDictionary.ts
 
 // -------------------------------
 // Types
