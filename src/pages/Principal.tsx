@@ -1,20 +1,16 @@
+// src/pages/Principal.tsx
 import React from "react";
 import Kpi from "../components/Kpi";
 import Gauge from "../components/Gauge";
 import Bullet from "../components/Bullet";
 import Spark from "../components/Spark";
 import InsightCard from "../components/InsightCard";
-
-// compact two-card calendar
-import InsightsHeatmapCompact, {
-  HeatmapInsight,
-  InsightCategory,
-} from "../components/InsightsHeatmapCompact";
+import InsightsHeatmap from "../components/InsightsHeatmap";
 
 import { mockMetrics, mockInsights } from "../data/mock";
 import { bands } from "../config/benchmarks";
 
-// ---- minimal shims for uploaded data ----
+// ---- Types & window shims ----
 type UploadedRow = Record<string, any>;
 
 declare global {
@@ -25,50 +21,77 @@ declare global {
   }
 }
 
+type InsightCategory =
+  | "Growth Opportunities"
+  | "Retention Radar"
+  | "Service Drain"
+  | "Risk & Compliance";
+
+type HeatmapInsight = {
+  id: number; // 1..50
+  title: string;
+  household_id?: string;
+  detection_date?: string; // ISO date
+  category: InsightCategory;
+  severity: "good" | "opportunity" | "warn" | "urgent";
+};
+
+// ---- Data hooks ----
 function useMetrics() {
   return window.__BB_METRICS__ || mockMetrics;
 }
+
 function useUploadedRows(): UploadedRow[] {
   return window.__BB_ROWS__ || [];
 }
 
-// If no insights are precomputed, synthesize a few so the calendar renders
-function useHeatmapInsights(rows: UploadedRow[]): HeatmapInsight[] {
+// ---- Lightweight fallback builder for heatmap demo ----
+function fallbackBuildInsightsFromRows(rows: UploadedRow[]): HeatmapInsight[] {
   if (Array.isArray(window.__BB_INSIGHTS__) && window.__BB_INSIGHTS__!.length) {
     return window.__BB_INSIGHTS__!;
   }
-  const cats: InsightCategory[] = [
+
+  const sampleTitles = [
+    "Bundling Gap",
+    "Umbrella Opportunity",
+    "Renewal No Review Window",
+    "High RL Segment",
+  ];
+  const sampleCategories: InsightCategory[] = [
+    "Growth Opportunities",
     "Growth Opportunities",
     "Retention Radar",
     "Service Drain",
-    "Risk & Compliance",
   ];
-  const sevs: HeatmapInsight["severity"][] = ["urgent", "warn", "opportunity", "good"];
+  const sampleSev: HeatmapInsight["severity"][] = ["opportunity", "opportunity", "urgent", "warn"];
 
-  const out: HeatmapInsight[] = [];
-  for (let i = 0; i < 60; i++) {
+  const items: HeatmapInsight[] = [];
+  const N = Math.max(rows.length || 50, 12);
+
+  for (let i = 0; i < Math.min(N, 80); i++) {
     const d = new Date();
-    d.setDate(d.getDate() + (i % 90));
-    out.push({
-      id: ((i % 12) + 1) as number,
-      title: ["Bundling Gap", "Umbrella Opportunity", "No Review Window", "High RL"][i % 4],
+    d.setMonth(d.getMonth() + (i % 12)); // spread across 12 months
+    items.push({
+      id: ((i % 4) + 1) as number,
+      title: sampleTitles[i % sampleTitles.length],
       household_id: rows[i]?.household_id || `HH-${i + 1}`,
       detection_date: d.toISOString(),
-      category: cats[i % cats.length],
-      severity: sevs[i % sevs.length],
+      category: sampleCategories[i % sampleCategories.length],
+      severity: sampleSev[i % sampleSev.length],
     });
   }
-  return out;
+  return items;
 }
 
-// ---- PAGE ----
+// ---- Page ----
 export default function Principal() {
   const m = useMetrics();
   const rows = useUploadedRows();
-  const insights = useHeatmapInsights(rows);
+  const heatmapData = fallbackBuildInsightsFromRows(rows);
 
-  const [winDays, setWinDays] = React.useState<15 | 30 | 60 | 90>(30);
-  const [catFilter, setCatFilter] = React.useState<InsightCategory[]>([]);
+  // ✅ ADD THESE TWO HOOKS
+  const [open, setOpen] = React.useState(false);
+  const [selectedBin, setSelectedBin] = React.useState<any>(null);
 
   return (
     <div className="mx-auto max-w-6xl p-6 space-y-4">
@@ -109,74 +132,63 @@ export default function Principal() {
         <Spark label="Tenure Momentum (sim)" points={[6.4, 6.5, 6.6, 6.7, 6.8]} />
       </div>
 
-      {/* Compact calendar (two cards). Toggle 15/30/60/90; show category filters for 60/90 */}
+      {/* Upcoming Insights Heatmap */}
       <div className="card p-4">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-bold">Upcoming Insights (Compact)</h2>
-          <div className="flex items-center gap-2">
-            {([15, 30, 60, 90] as const).map((d) => (
-              <button
-                key={d}
-                onClick={() => setWinDays(d)}
-                className={`badge border-white/20 ${winDays === d ? "bg-white/10" : ""}`}
-              >
-                {d}d
-              </button>
-            ))}
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-bold">Upcoming Insights (12-month view)</h2>
+          <div className="flex gap-2 text-xs">
+            <span className="badge border-white/20">Monthly</span>
+            {/* Add Weekly/Quarterly toggles here if/when you wire them */}
           </div>
         </div>
 
-        {(winDays === 60 || winDays === 90) && (
-          <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
-            {(
-              [
-                "Growth Opportunities",
-                "Retention Radar",
-                "Service Drain",
-                "Risk & Compliance",
-              ] as const
-            ).map((c) => {
-              const active = catFilter.includes(c);
-              return (
-                <label key={c} className="inline-flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={active}
-                    onChange={(e) =>
-                      setCatFilter((prev) =>
-                        e.target.checked ? [...prev, c] : prev.filter((x) => x !== c)
-                      )
-                    }
-                  />
-                  <span className="rounded bg-white/5 px-2 py-1">{c}</span>
-                </label>
-              );
-            })}
-            <button className="badge border-white/20" onClick={() => setCatFilter([])}>
-              Clear
-            </button>
-          </div>
-        )}
-
-        <InsightsHeatmapCompact
-          data={insights}
-          windowDays={winDays}
-          twoCardsOnly
-          categories={catFilter.length ? catFilter : undefined}
-          onWindowClick={(bin) => {
-            setSelectedBin({
-              label: bin.label,
-              items: bin.items,
-            });
+        <InsightsHeatmap
+          data={heatmapData}
+          months={12}
+          defaultCategories={[]}
+          onMonthClick={(bin: any) => {
+            setSelectedBin(bin);
             setOpen(true);
-          }}
-          onItemClick={(it) => {
-            // Optional: open household in same modal or navigate
-            const hh = encodeURIComponent(it.household_id || "");
-            window.location.href = `/household/${hh}?insight=${it.id}`;
           }}
         />
       </div>
+
+      {/* Simple modal for clicked month */}
+      {open && (
+        <>
+          <div className="drawer-overlay" onClick={() => setOpen(false)} />
+          <div className="card fixed left-1/2 top-20 z-50 w-[90vw] max-w-2xl -translate-x-1/2 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="font-semibold">{selectedBin?.label || "Selected Month"}</h3>
+              <button className="badge border-white/20" onClick={() => setOpen(false)}>
+                Close
+              </button>
+            </div>
+            <div className="max-h-[60vh] overflow-auto space-y-2">
+              {(selectedBin?.items || []).map((it: any, idx: number) => (
+                <div key={idx} className="flex items-center justify-between rounded bg-white/5 p-2">
+                  <div className="text-sm">
+                    <div className="font-medium">{it.title}</div>
+                    <div className="text-xs text-slate-400">
+                      HH: {it.household_id || "—"} • Category: {it.category} • Severity:{" "}
+                      {it.severity}
+                    </div>
+                  </div>
+                  <a
+                    className="badge border-white/20"
+                    href={`/household/${encodeURIComponent(it.household_id || "")}?insight=${it.id}`}
+                  >
+                    View
+                  </a>
+                </div>
+              ))}
+              {(!selectedBin?.items || selectedBin.items.length === 0) && (
+                <div className="text-sm text-slate-400">No insights in this month.</div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Suggested Actions / Top Insights */}
       <div className="grid gap-4 md:grid-cols-3">
@@ -195,4 +207,3 @@ export default function Principal() {
     </div>
   );
 }
-
