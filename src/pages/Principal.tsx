@@ -1,84 +1,68 @@
-// src/pages/Principal.tsx
 import React from "react";
-
 import Kpi from "../components/Kpi";
 import Gauge from "../components/Gauge";
 import Bullet from "../components/Bullet";
 import Spark from "../components/Spark";
 import InsightCard from "../components/InsightCard";
-import InsightsHeatmap from "../components/InsightsHeatmap";
+
+// ⬇️ replace big monthly heatmap with compact 2-card windowed view
+import InsightsHeatmapCompact, {
+  HeatmapInsight,
+  InsightCategory,
+} from "../components/InsightsHeatmapCompact";
 
 import { mockMetrics, mockInsights } from "../data/mock";
 import { bands } from "../config/benchmarks";
 
-// ✅ use the central store
-import { getMetrics, getRows, getInsights } from "../stores";
-
-// ---- Local types (UI only) ----
+// ---- keep your metrics/rows shims or real store ----
 type UploadedRow = Record<string, any>;
+declare global {
+  interface Window {
+    __BB_METRICS__?: any;
+    __BB_ROWS__?: UploadedRow[];
+    __BB_INSIGHTS__?: HeatmapInsight[];
+  }
+}
+function useMetrics() { return window.__BB_METRICS__ || mockMetrics; }
+function useUploadedRows(): UploadedRow[] { return window.__BB_ROWS__ || []; }
 
-type InsightCategory =
-  | "Growth Opportunities"
-  | "Retention Radar"
-  | "Service Drain"
-  | "Risk & Compliance";
-
-type HeatmapInsight = {
-  id: number; // 1..50
-  title: string;
-  household_id?: string;
-  detection_date?: string; // ISO date
-  category: InsightCategory;
-  severity: "good" | "opportunity" | "warn" | "urgent";
-};
-
-// ---- Fallback builder for heatmap if store has no insights yet ----
-function fallbackBuildInsightsFromRows(rows: UploadedRow[]): HeatmapInsight[] {
-  const sampleTitles = [
-    "Bundling Gap",
-    "Umbrella Opportunity",
-    "Renewal No Review Window",
-    "High RL Segment",
-  ];
-  const sampleCategories: InsightCategory[] = [
-    "Growth Opportunities",
+// ---- tiny fallback to synthesize insights if none provided ----
+function useHeatmapInsights(rows: UploadedRow[]): HeatmapInsight[] {
+  if (Array.isArray(window.__BB_INSIGHTS__) && window.__BB_INSIGHTS__!.length) {
+    return window.__BB_INSIGHTS__!;
+  }
+  const cats: InsightCategory[] = [
     "Growth Opportunities",
     "Retention Radar",
     "Service Drain",
+    "Risk & Compliance",
   ];
-  const sampleSev: HeatmapInsight["severity"][] = ["opportunity", "opportunity", "urgent", "warn"];
-
-  const items: HeatmapInsight[] = [];
-  const N = Math.max(rows.length || 50, 12);
-
-  for (let i = 0; i < Math.min(N, 80); i++) {
+  const sevs: HeatmapInsight["severity"][] = ["urgent", "warn", "opportunity", "good"];
+  const out: HeatmapInsight[] = [];
+  for (let i = 0; i < 60; i++) {
     const d = new Date();
-    d.setMonth(d.getMonth() + (i % 12)); // spread across 12 months
-    items.push({
-      id: ((i % 4) + 1) as number,
-      title: sampleTitles[i % sampleTitles.length],
+    d.setDate(d.getDate() + (i % 90));
+    out.push({
+      id: ((i % 12) + 1) as number,
+      title: ["Bundling Gap", "Umbrella Opportunity", "No Review Window", "High RL"][i % 4],
       household_id: rows[i]?.household_id || `HH-${i + 1}`,
       detection_date: d.toISOString(),
-      category: sampleCategories[i % sampleCategories.length],
-      severity: sampleSev[i % sampleSev.length],
+      category: cats[i % cats.length],
+      severity: sevs[i % sevs.length],
     });
   }
-  return items;
+  return out;
 }
 
+// ---- Page ----
 export default function Principal() {
-  // Pull data from the store (with sensible fallbacks)
-  const m = getMetrics() || mockMetrics;
-  const rows: UploadedRow[] = getRows() || [];
-  const storeInsights: HeatmapInsight[] = (getInsights() as HeatmapInsight[]) || [];
+  const m = useMetrics();
+  const rows = useUploadedRows();
+  const insights = useHeatmapInsights(rows);
 
-  // If we have computed insights in the store, use them; otherwise synthesize from rows
-  const heatmapData: HeatmapInsight[] =
-    storeInsights.length > 0 ? storeInsights : fallbackBuildInsightsFromRows(rows);
-
-  // Modal state for clicking a month/bin in the heatmap
-  const [open, setOpen] = React.useState(false);
-  const [selectedBin, setSelectedBin] = React.useState<any>(null);
+  // NEW: window size + category filter (shown only for 60/90d)
+  const [winDays, setWinDays] = React.useState<15 | 30 | 60 | 90>(30);
+  const [catFilter, setCatFilter] = React.useState<InsightCategory[]>([]);
 
   return (
     <div className="mx-auto max-w-6xl p-6 space-y-4">
@@ -119,67 +103,235 @@ export default function Principal() {
         <Spark label="Tenure Momentum (sim)" points={[6.4, 6.5, 6.6, 6.7, 6.8]} />
       </div>
 
-      {/* Upcoming Insights Calendar (panel) */}
+      {/* === COMPACT CALENDAR: two cards, 15/30/60/90 day === */}
       <div className="card p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-bold">Upcoming Insights (12-month view)</h2>
-          <div className="flex gap-2 text-xs">
-            <span className="badge border-white/20">Monthly</span>
-            {/* potential Weekly / Quarterly toggles later */}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-bold">Upcoming Insights (Compact)</h2>
+          <div className="flex items-center gap-2">
+            {([15, 30, 60, 90] as const).map((d) => (
+              <button
+                key={d}
+                onClick={() => setWinDays(d)}
+                className={`badge border-white/20 ${winDays === d ? "bg-white/10" : ""}`}
+              >
+                {d}d
+              </button>
+            ))}
           </div>
         </div>
 
-        <InsightsHeatmap
-          data={heatmapData}
-          months={12}
-          defaultCategories={[]}
-          onMonthClick={(bin) => {
-            // bin = { year, monthIndex, label, items:[{id,title,household_id,...}] }
-            setSelectedBin(bin);
-            setOpen(true);
+        {(winDays === 60 || winDays === 90) && (
+          <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
+            {(["Growth Opportunities","Retention Radar","Service Drain","Risk & Compliance"] as const).map((c) => {
+              const active = catFilter.includes(c);
+              return (
+                <label key={c} className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={active}
+                    onChange={(e) =>
+                      setCatFilter((prev) =>
+                        e.target.checked ? [...prev, c] : prev.filter((x) => x !== c)
+                      )
+                    }
+                  />
+                  <span className="rounded bg-white/5 px-2 py-1">{c}</span>
+                </label>
+              );
+            })}
+            <button className="badge border-white/20" onClick={() => setCatFilter([])}>
+              Clear
+            </button>
+          </div>
+        )}
+
+        <InsightsHeatmapCompact
+          data={insights}
+          windowDays={winDays}
+          twoCardsOnly
+          categories={catFilter.length ? catFilter : undefined}
+          onWindowClick={(bin) => {
+            // Hook up modal/drawer here
+            console.log("Window clicked:", bin);
           }}
         />
       </div>
 
-      {/* Simple modal for clicked month */}
-      {open && (
-        <>
-          <div className="drawer-overlay" onClick={() => setOpen(false)} />
-          <div className="card fixed left-1/2 top-20 z-50 w-[90vw] max-w-2xl -translate-x-1/2 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="font-semibold">{selectedBin?.label || "Selected Month"}</h3>
-              <button className="badge border-white/20" onClick={() => setOpen(false)}>
-                Close
+      {/* Suggested Actions / Top Insights */}
+      <div className="grid gap-4 md:grid-cols-3">
+        {mockInsights.slice(0, 3).map((ins) => (
+          <InsightCard
+            key={ins.key}
+            title={ins.title}
+            description={ins.description}
+            impact={ins.impact}
+            urgency={ins.urgency}
+            confidence={ins.confidence}
+            onAdd={() => alert(`Added ${ins.title} to plan`)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+import React from "react";
+import Kpi from "../components/Kpi";
+import Gauge from "../components/Gauge";
+import Bullet from "../components/Bullet";
+import Spark from "../components/Spark";
+import InsightCard from "../components/InsightCard";
+
+// ⬇️ replace big monthly heatmap with compact 2-card windowed view
+import InsightsHeatmapCompact, {
+  HeatmapInsight,
+  InsightCategory,
+} from "../components/InsightsHeatmapCompact";
+
+import { mockMetrics, mockInsights } from "../data/mock";
+import { bands } from "../config/benchmarks";
+
+// ---- keep your metrics/rows shims or real store ----
+type UploadedRow = Record<string, any>;
+declare global {
+  interface Window {
+    __BB_METRICS__?: any;
+    __BB_ROWS__?: UploadedRow[];
+    __BB_INSIGHTS__?: HeatmapInsight[];
+  }
+}
+function useMetrics() { return window.__BB_METRICS__ || mockMetrics; }
+function useUploadedRows(): UploadedRow[] { return window.__BB_ROWS__ || []; }
+
+// ---- tiny fallback to synthesize insights if none provided ----
+function useHeatmapInsights(rows: UploadedRow[]): HeatmapInsight[] {
+  if (Array.isArray(window.__BB_INSIGHTS__) && window.__BB_INSIGHTS__!.length) {
+    return window.__BB_INSIGHTS__!;
+  }
+  const cats: InsightCategory[] = [
+    "Growth Opportunities",
+    "Retention Radar",
+    "Service Drain",
+    "Risk & Compliance",
+  ];
+  const sevs: HeatmapInsight["severity"][] = ["urgent", "warn", "opportunity", "good"];
+  const out: HeatmapInsight[] = [];
+  for (let i = 0; i < 60; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() + (i % 90));
+    out.push({
+      id: ((i % 12) + 1) as number,
+      title: ["Bundling Gap", "Umbrella Opportunity", "No Review Window", "High RL"][i % 4],
+      household_id: rows[i]?.household_id || `HH-${i + 1}`,
+      detection_date: d.toISOString(),
+      category: cats[i % cats.length],
+      severity: sevs[i % sevs.length],
+    });
+  }
+  return out;
+}
+
+// ---- Page ----
+export default function Principal() {
+  const m = useMetrics();
+  const rows = useUploadedRows();
+  const insights = useHeatmapInsights(rows);
+
+  // NEW: window size + category filter (shown only for 60/90d)
+  const [winDays, setWinDays] = React.useState<15 | 30 | 60 | 90>(30);
+  const [catFilter, setCatFilter] = React.useState<InsightCategory[]>([]);
+
+  return (
+    <div className="mx-auto max-w-6xl p-6 space-y-4">
+      <h1 className="text-xl font-extrabold text-indigo-300">Principal Dashboard</h1>
+
+      {/* Top KPI Row */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Gauge value={m.benchScore} max={100} label="BenchScore™" />
+        <Kpi
+          label="Time-Back Number™"
+          value={`${Math.round(m.timeBackHoursMoTopN)} hrs/mo`}
+          metric="benchScore"
+          numeric={m.benchScore}
+          tooltip="Monthly hours reclaimable from Top-N split accounts"
+        />
+        <Kpi
+          label="Coverage Depth"
+          value={`${m.coverageDepthPct.toFixed(0)}%`}
+          metric="coverageDepth"
+          numeric={m.coverageDepthPct / 100}
+        />
+      </div>
+
+      {/* Ops Row */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Kpi
+          label="Remarketing Load"
+          value={`${m.remarketingLoadPer100.toFixed(1)} / 100`}
+          metric="remarketingLoad"
+          numeric={m.remarketingLoadPer100}
+        />
+        <Bullet
+          label="Service Touch Index"
+          value={m.serviceTouchIndexMinPerHHYr}
+          target={bands.serviceTouchIndex.healthy}
+          goodIsLow
+        />
+        <Spark label="Tenure Momentum (sim)" points={[6.4, 6.5, 6.6, 6.7, 6.8]} />
+      </div>
+
+      {/* === COMPACT CALENDAR: two cards, 15/30/60/90 day === */}
+      <div className="card p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-bold">Upcoming Insights (Compact)</h2>
+          <div className="flex items-center gap-2">
+            {([15, 30, 60, 90] as const).map((d) => (
+              <button
+                key={d}
+                onClick={() => setWinDays(d)}
+                className={`badge border-white/20 ${winDays === d ? "bg-white/10" : ""}`}
+              >
+                {d}d
               </button>
-            </div>
-            <div className="max-h-[60vh] overflow-auto space-y-2">
-              {(selectedBin?.items || []).map((it: any, idx: number) => (
-                <div
-                  key={idx}
-                  className="flex items-center justify-between rounded bg-white/5 p-2"
-                >
-                  <div className="text-sm">
-                    <div className="font-medium">{it.title}</div>
-                    <div className="text-xs text-slate-400">
-                      HH: {it.household_id || "—"} • Category: {it.category} • Severity:{" "}
-                      {it.severity}
-                    </div>
-                  </div>
-                  <a
-                    className="badge border-white/20"
-                    href={`/insights?hh=${encodeURIComponent(it.household_id || "")}&id=${it.id}`}
-                  >
-                    View
-                  </a>
-                </div>
-              ))}
-              {(!selectedBin?.items || selectedBin.items.length === 0) && (
-                <div className="text-sm text-slate-400">No insights in this month.</div>
-              )}
-            </div>
+            ))}
           </div>
-        </>
-      )}
+        </div>
+
+        {(winDays === 60 || winDays === 90) && (
+          <div className="mb-3 flex flex-wrap items-center gap-3 text-xs">
+            {(["Growth Opportunities","Retention Radar","Service Drain","Risk & Compliance"] as const).map((c) => {
+              const active = catFilter.includes(c);
+              return (
+                <label key={c} className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={active}
+                    onChange={(e) =>
+                      setCatFilter((prev) =>
+                        e.target.checked ? [...prev, c] : prev.filter((x) => x !== c)
+                      )
+                    }
+                  />
+                  <span className="rounded bg-white/5 px-2 py-1">{c}</span>
+                </label>
+              );
+            })}
+            <button className="badge border-white/20" onClick={() => setCatFilter([])}>
+              Clear
+            </button>
+          </div>
+        )}
+
+        <InsightsHeatmapCompact
+          data={insights}
+          windowDays={winDays}
+          twoCardsOnly
+          categories={catFilter.length ? catFilter : undefined}
+          onWindowClick={(bin) => {
+            // Hook up modal/drawer here
+            console.log("Window clicked:", bin);
+          }}
+        />
+      </div>
 
       {/* Suggested Actions / Top Insights */}
       <div className="grid gap-4 md:grid-cols-3">
