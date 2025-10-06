@@ -1,0 +1,655 @@
+// src/data/dataDictionary.ts
+
+// -------------------------------
+// Types
+// -------------------------------
+export type Category =
+  | "Core Scorecard"
+  | "Growth Opportunities"
+  | "Retention Radar"
+  | "Service Drain"
+  | "Revenue & Efficiency"
+  | "Pricing & Appetite"
+  | "Producer & Office Performance"
+  | "Coverage & Endorsements"
+  | "Data Quality";
+
+export type MetricDef = {
+  key: string;
+  title: string;
+  definition: string;
+  formula: string;
+  category: Category;
+  fields: string[];
+};
+
+export type InsightDef = {
+  id: number;
+  key: string;
+  title: string;
+  definition: string;
+  flagLogic: string;
+  metric: string;
+  category: Category;
+  fields: string[];
+};
+
+// -------------------------------
+// Core Scorecard (top dials shown in DataDictionary.tsx)
+// -------------------------------
+export const CORE_METRICS: MetricDef[] = [
+  {
+    key: "coverage_depth",
+    title: "Coverage Depth",
+    definition:
+      "% of households with lines_count ≥ 2 (bundle proxy). Higher is healthier.",
+    formula: "coverage_depth = count(lines_count ≥ 2) ÷ total_households × 100",
+    category: "Core Scorecard",
+    fields: ["lines_count"],
+  },
+  {
+    key: "remarketing_load",
+    title: "Remarketing Load",
+    definition:
+      "remarkets ÷ renewals × 100. Lower is better (less drag on the team).",
+    formula:
+      "remarketing_load = remarkets_12m ÷ renewals_12m × 100 (or per-100 renewals)",
+    category: "Core Scorecard",
+    fields: ["remarkets_12m", "renewals_12m"],
+  },
+  {
+    key: "service_touch_index",
+    title: "Service Touch Index",
+    definition:
+      "Minutes per household per year: service_touches_12m × avg_minutes_per_touch.",
+    formula:
+      "service_minutes = service_touches_12m × avg_minutes_per_touch (normalize per HH if needed)",
+    category: "Core Scorecard",
+    fields: ["service_touches_12m", "avg_minutes_per_touch"],
+  },
+  {
+    key: "tenure_momentum",
+    title: "Tenure Momentum",
+    definition:
+      "Average tenure_years and its MoM trend; depth-weighted where possible.",
+    formula:
+      "Δ tenure_momentum = avg_tenure_this_month − avg_tenure_last_month (optionally weighted by lines_count or bundled_flag)",
+    category: "Core Scorecard",
+    fields: ["tenure_years", "month_bucket", "lines_count", "bundled_flag"],
+  },
+  {
+    key: "benchscore",
+    title: "BenchScore™",
+    definition:
+      "0–100 composite of bundling rate, remarketing load, service minutes, tenure, and experience quality.",
+    formula:
+      "BenchScore = w1*Bundling + w2*(100−RL) + w3*(100−scaled_STI) + w4*TenureIndex + w5*EQIndex (weights configurable)",
+    category: "Core Scorecard",
+    fields: [
+      "bundled_flag",
+      "remarkets_12m",
+      "renewals_12m",
+      "service_touches_12m",
+      "avg_minutes_per_touch",
+      "tenure_years",
+      "claims_open_count",
+      "claims_closed_12m",
+    ],
+  },
+];
+
+// -------------------------------
+// Insights-50 (with categories for filtering)
+// -------------------------------
+export const INSIGHTS_50: InsightDef[] = [
+  {
+    id: 1,
+    key: "bundling_gap",
+    title: "Bundling Gap",
+    definition:
+      "Home+Auto split across carriers, or only one eligible line present.",
+    flagLogic:
+      "(home_flag=1 AND auto_flag=1 AND primary_carrier!=secondary_carrier_optional) OR (home_flag+auto_flag=1)",
+    metric: "Count of households",
+    category: "Growth Opportunities",
+    fields: ["home_flag", "auto_flag", "primary_carrier", "secondary_carrier_optional"],
+  },
+  {
+    id: 2,
+    key: "coverage_depth_tier",
+    title: "Coverage Depth Tier",
+    definition: "Classifies HH by lines_count: shallow(1) / core(2) / deep(3+).",
+    flagLogic: "lines_count==1 (shallow), ==2 (core), >=3 (deep)",
+    metric: "% shallow / % core / % deep",
+    category: "Coverage & Endorsements",
+    fields: ["lines_count"],
+  },
+  {
+    id: 3,
+    key: "umbrella_opportunity",
+    title: "Umbrella Opportunity",
+    definition: "Eligible households without umbrella; excludes low-value segment.",
+    flagLogic:
+      "umbrella_flag=0 AND (home_flag=1 OR auto_flag=1) AND segment_tier NOT LIKE '%bronze%'",
+    metric: "Count of households",
+    category: "Growth Opportunities",
+    fields: ["umbrella_flag", "home_flag", "auto_flag", "segment_tier"],
+  },
+  {
+    id: 4,
+    key: "water_backup_gap",
+    title: "Water Backup Gap",
+    definition: "Missing water backup or zero limit.",
+    flagLogic: "water_backup_limit is null OR water_backup_limit==0",
+    metric: "Count of households",
+    category: "Coverage & Endorsements",
+    fields: ["water_backup_limit"],
+  },
+  {
+    id: 5,
+    key: "service_line_gap",
+    title: "Service Line Gap",
+    definition: "Missing service line coverage.",
+    flagLogic: "service_line_coverage_limit is null OR ==0",
+    metric: "Count of households",
+    category: "Coverage & Endorsements",
+    fields: ["service_line_coverage_limit"],
+  },
+  {
+    id: 6,
+    key: "equipment_breakdown_gap",
+    title: "Equipment Breakdown Gap",
+    definition: "No equipment breakdown endorsement.",
+    flagLogic: "equipment_breakdown_flag=0",
+    metric: "Count of households",
+    category: "Coverage & Endorsements",
+    fields: ["equipment_breakdown_flag"],
+  },
+  {
+    id: 7,
+    key: "roof_upgrade_gap",
+    title: "Roof Upgrade Gap",
+    definition: "Roof surfacing loss settlement upgrade missing.",
+    flagLogic: "roof_surfacing_loss_settlement=0",
+    metric: "Count of households",
+    category: "Coverage & Endorsements",
+    fields: ["roof_surfacing_loss_settlement"],
+  },
+  {
+    id: 8,
+    key: "pet_injury_gap_auto",
+    title: "Pet Injury Gap (Auto)",
+    definition: "Auto households without pet injury benefit.",
+    flagLogic: "auto_flag=1 AND pet_injury_flag=0",
+    metric: "Count / total auto HH",
+    category: "Coverage & Endorsements",
+    fields: ["auto_flag", "pet_injury_flag"],
+  },
+  {
+    id: 9,
+    key: "key_fob_gap",
+    title: "Key Fob Replacement Gap",
+    definition: "Missing key fob replacement add-on.",
+    flagLogic: "key_fob_replacement_flag=0",
+    metric: "Count of households",
+    category: "Coverage & Endorsements",
+    fields: ["key_fob_replacement_flag"],
+  },
+  {
+    id: 10,
+    key: "refrigerated_products_gap",
+    title: "Refrigerated Products Coverage Gap",
+    definition: "Missing food spoilage coverage or zero limit.",
+    flagLogic: "refrigerated_products_flag=0 OR refrigerated_products_limit=0",
+    metric: "Count of households",
+    category: "Coverage & Endorsements",
+    fields: ["refrigerated_products_flag", "refrigerated_products_limit"],
+  },
+  {
+    id: 11,
+    key: "home_umb_no_auto",
+    title: "Home + Umbrella, No Auto",
+    definition: "Home+Umbrella but missing Auto.",
+    flagLogic: "home_flag=1 AND umbrella_flag=1 AND auto_flag=0",
+    metric: "Count of households",
+    category: "Growth Opportunities",
+    fields: ["home_flag", "umbrella_flag", "auto_flag"],
+  },
+  {
+    id: 12,
+    key: "auto_umb_no_home",
+    title: "Auto + Umbrella, No Home",
+    definition: "Auto+Umbrella but missing Home.",
+    flagLogic: "auto_flag=1 AND umbrella_flag=1 AND home_flag=0",
+    metric: "Count of households",
+    category: "Growth Opportunities",
+    fields: ["auto_flag", "umbrella_flag", "home_flag"],
+  },
+  {
+    id: 13,
+    key: "high_rl_segment",
+    title: "High RL Segment",
+    definition: "Segments where remarketing load exceeds target.",
+    flagLogic: "remarkets_12m / (remarkets_12m+1) * 100 > 25",
+    metric: "Count of HH in high-RL",
+    category: "Pricing & Appetite",
+    fields: ["remarkets_12m", "segment_tier"],
+  },
+  {
+    id: 14,
+    key: "chronic_remarketer",
+    title: "Chronic Remarketer HH",
+    definition: "Remarketed ≥2 of last 3 cycles (needs event log).",
+    flagLogic: "Requires event log history of remarkets",
+    metric: "Count of households",
+    category: "Retention Radar",
+    fields: ["event_log.remarket_events"],
+  },
+  {
+    id: 15,
+    key: "renewal_no_review_window",
+    title: "Renewal No Review Window",
+    definition: "Renewals in <30 days with no review in >60 days.",
+    flagLogic:
+      "daysUntil(renewal_date)<30 AND (daysUntil(last_reviewed_date)>60 OR null)",
+    metric: "Count of households",
+    category: "Retention Radar",
+    fields: ["renewal_date", "last_reviewed_date"],
+  },
+  {
+    id: 16,
+    key: "producer_reshop_outlier",
+    title: "Producer Re-shop Outlier",
+    definition: "Producer with RL >150% of agency avg for 2+ months.",
+    flagLogic: "Requires monthly producer RL series",
+    metric: "Producers flagged",
+    category: "Producer & Office Performance",
+    fields: ["producer_id", "remarkets_by_month"],
+  },
+  {
+    id: 17,
+    key: "carrier_appetite_mismatch",
+    title: "Carrier Appetite Mismatch",
+    definition: "Carrier(s) with RL 75% above agency average.",
+    flagLogic: "avg RL per carrier > 1.75 × agency avg",
+    metric: "Carrier names",
+    category: "Pricing & Appetite",
+    fields: ["primary_carrier", "remarkets_12m"],
+  },
+  {
+    id: 18,
+    key: "late_bound_renewals",
+    title: "Late-Bound Renewals",
+    definition: "Policies bound within 3 days of renewal (needs events).",
+    flagLogic: "bind_date within 3 days of renewal_date",
+    metric: "Count of policies",
+    category: "Retention Radar",
+    fields: ["bind_date", "renewal_date"],
+  },
+  {
+    id: 19,
+    key: "nonrenewal_early_warning",
+    title: "Non-renewal Early Warning",
+    definition: "Churn risk ≥0.7 and renewal <45 days.",
+    flagLogic: "churn_risk_score_0_1>=0.7 AND daysUntil(renewal_date)<45",
+    metric: "Count of households",
+    category: "Retention Radar",
+    fields: ["churn_risk_score_0_1", "renewal_date"],
+  },
+  {
+    id: 20,
+    key: "remarket_reason_pareto",
+    title: "Remarketing Reason Pareto",
+    definition: "Top 3 reasons creating most remarkets.",
+    flagLogic: "count by remarket_reason; sort desc; top 3",
+    metric: "Top 3 with % of HH",
+    category: "Pricing & Appetite",
+    fields: ["remarket_reason"],
+  },
+  {
+    id: 21,
+    key: "high_minutes_hh",
+    title: "High Minutes HH",
+    definition: "Top decile households by annual service minutes.",
+    flagLogic: "service_touches_12m × avg_minutes_per_touch in top 10%",
+    metric: "Count of households",
+    category: "Service Drain",
+    fields: ["service_touches_12m", "avg_minutes_per_touch"],
+  },
+  {
+    id: 22,
+    key: "channel_cost_overweight",
+    title: "Channel Cost Overweight",
+    definition: "Channels with minutes/touch above agency average.",
+    flagLogic: "mean(minutes_per_touch by channel) > mean(all HH minutes)",
+    metric: "Channels flagged",
+    category: "Service Drain",
+    fields: ["service_channel", "avg_minutes_per_touch"],
+  },
+  {
+    id: 23,
+    key: "poi_drain",
+    title: "Proof of Insurance Drain",
+    definition: "High minutes on ID card/COI requests (needs events).",
+    flagLogic: "event category='POI' minutes above threshold",
+    metric: "Minutes or HH count",
+    category: "Service Drain",
+    fields: ["event_log.category", "minutes_spent"],
+  },
+  {
+    id: 24,
+    key: "billing_time_sink",
+    title: "Billing & Payments Time Sink",
+    definition: "High minutes on billing issues (needs events).",
+    flagLogic: "event category='Billing' minutes above threshold",
+    metric: "Minutes or HH count",
+    category: "Service Drain",
+    fields: ["event_log.category", "minutes_spent"],
+  },
+  {
+    id: 25,
+    key: "claims_followup_burden",
+    title: "Claim Follow-up Burden",
+    definition: "Minutes on claim follow-ups above target (needs events).",
+    flagLogic: "event category='Claim Follow-up' minutes above threshold",
+    metric: "Minutes or HH count",
+    category: "Service Drain",
+    fields: ["event_log.category", "minutes_spent"],
+  },
+  {
+    id: 26,
+    key: "unbundled_overhead",
+    title: "Unbundled Overhead",
+    definition: "Avg extra minutes per unbundled HH.",
+    flagLogic: "bundled_flag=0; compute avg minutes",
+    metric: "Avg minutes/HH (unbundled)",
+    category: "Service Drain",
+    fields: ["bundled_flag", "service_touches_12m", "avg_minutes_per_touch"],
+  },
+  {
+    id: 27,
+    key: "csr_load_imbalance",
+    title: "CSR Load Imbalance",
+    definition: "A CSR’s book consumes ≥30% more minutes/HH than median.",
+    flagLogic: "minutes/HH by CSR vs median",
+    metric: "CSRs flagged",
+    category: "Producer & Office Performance",
+    fields: ["csr_id", "service_touches_12m", "avg_minutes_per_touch"],
+  },
+  {
+    id: 28,
+    key: "fcr_gap",
+    title: "First-Contact Resolution Gap",
+    definition: "Multi-touch threads where 1 touch should suffice (needs events).",
+    flagLogic: "threaded simple requests with touch_count>1",
+    metric: "Count of threads",
+    category: "Service Drain",
+    fields: ["thread_id", "category", "touch_count"],
+  },
+  {
+    id: 29,
+    key: "aht_outlier",
+    title: "AHT Outlier",
+    definition: "Average handle time in the top decile.",
+    flagLogic: "avg_minutes_per_touch ≥ P90",
+    metric: "Count of households",
+    category: "Service Drain",
+    fields: ["avg_minutes_per_touch"],
+  },
+  {
+    id: 30,
+    key: "self_service_uptake",
+    title: "Self-Service Uptake",
+    definition: "Share of portal/email vs phone servicing.",
+    flagLogic: "mix by service_channel; report Portal %",
+    metric: "Portal % of total",
+    category: "Revenue & Efficiency",
+    fields: ["service_channel"],
+  },
+  {
+    id: 31,
+    key: "tenure_momentum_negative",
+    title: "Tenure Momentum Negative",
+    definition: "MoM decline in average tenure.",
+    flagLogic: "avg_tenure_this_month < avg_tenure_last_month",
+    metric: "Positive / Negative",
+    category: "Retention Radar",
+    fields: ["tenure_years", "month_bucket"],
+  },
+  {
+    id: 32,
+    key: "low_tenure_high_depth_risk",
+    title: "Low Tenure, High Depth Risk",
+    definition: "Tenure<2, lines_count≥2, churn risk≥0.6.",
+    flagLogic: "tenure_years<2 AND lines_count≥2 AND churn_risk≥0.6",
+    metric: "Count of households",
+    category: "Retention Radar",
+    fields: ["tenure_years", "lines_count", "churn_risk_score_0_1"],
+  },
+  {
+    id: 33,
+    key: "retention_weak_signal",
+    title: "Retention Weak Signal",
+    definition: "Households not retained last term.",
+    flagLogic: "retained_last_term_flag=0",
+    metric: "% not retained",
+    category: "Retention Radar",
+    fields: ["retained_last_term_flag"],
+  },
+  {
+    id: 34,
+    key: "claims_backlog",
+    title: "Claims Backlog",
+    definition: "Avg open claims/HH exceeds threshold.",
+    flagLogic: "mean(claims_open_count) > target",
+    metric: "Open claims/HH",
+    category: "Retention Radar",
+    fields: ["claims_open_count"],
+  },
+  {
+    id: 35,
+    key: "high_claim_frequency_cohort",
+    title: "High Claim Frequency Cohort",
+    definition: "Segments with claims_closed_12m/HH >1.5× agency avg.",
+    flagLogic: "segment mean > 1.5 × overall mean",
+    metric: "Segments flagged",
+    category: "Pricing & Appetite",
+    fields: ["segment_tier", "claims_closed_12m"],
+  },
+  {
+    id: 36,
+    key: "experience_quality_dip",
+    title: "Experience Quality Dip",
+    definition: "Open claims rising while closed claims falling.",
+    flagLogic: "mean(open) > mean(closed_12m)",
+    metric: "Dip / Stable",
+    category: "Retention Radar",
+    fields: ["claims_open_count", "claims_closed_12m"],
+  },
+  {
+    id: 37,
+    key: "review_freshness_gap",
+    title: "Review Freshness Gap",
+    definition: "No review in the past 12 months.",
+    flagLogic: "last_reviewed_date null OR < now−365d",
+    metric: "Count of households",
+    category: "Retention Radar",
+    fields: ["last_reviewed_date"],
+  },
+  {
+    id: 38,
+    key: "churn_risk_hot_list",
+    title: "Churn Risk Hot List",
+    definition: "Top decile churn risk with renewal <60 days.",
+    flagLogic: "churn≥P90 AND daysUntil(renewal)<60",
+    metric: "Count of households",
+    category: "Retention Radar",
+    fields: ["churn_risk_score_0_1", "renewal_date"],
+  },
+  {
+    id: 39,
+    key: "account_value_underweighted",
+    title: "Account Value Underweighted",
+    definition: "Premium ≥P75 but depth=1 line.",
+    flagLogic: "written_premium_total≥P75 AND lines_count=1",
+    metric: "Count of households",
+    category: "Growth Opportunities",
+    fields: ["written_premium_total", "lines_count"],
+  },
+  {
+    id: 40,
+    key: "commission_efficiency",
+    title: "Commission Efficiency",
+    definition: "Commission dollars per service minute.",
+    flagLogic:
+      "(premium*commission_rate)/(touches*minutes) computed; flag low performers",
+    metric: "$ per minute",
+    category: "Revenue & Efficiency",
+    fields: [
+      "written_premium_total",
+      "commission_rate_pct",
+      "service_touches_12m",
+      "avg_minutes_per_touch",
+    ],
+  },
+  {
+    id: 41,
+    key: "remarketing_roi",
+    title: "Remarketing ROI",
+    definition: "Time cost of remarket vs estimated premium gain.",
+    flagLogic: "est_minutes_per_remarket*1.25 > written_premium_total*0.01",
+    metric: "Count of low-ROI remarkets",
+    category: "Revenue & Efficiency",
+    fields: ["est_minutes_per_remarket", "written_premium_total"],
+  },
+  {
+    id: 42,
+    key: "discount_leakage",
+    title: "Discount Leakage",
+    definition: "Eligible discounts not applied (e.g., bundle/safe driver).",
+    flagLogic: "bundle_discount_flag=0 OR safe_driver_flag=0",
+    metric: "Count of households",
+    category: "Revenue & Efficiency",
+    fields: ["bundle_discount_flag", "safe_driver_flag"],
+  },
+  {
+    id: 43,
+    key: "carrier_mix_concentration",
+    title: "Carrier Mix Concentration",
+    definition: "Over-reliance on one carrier (>45% of book).",
+    flagLogic: "share(primary_carrier) > 45%",
+    metric: "Carrier names",
+    category: "Pricing & Appetite",
+    fields: ["primary_carrier"],
+  },
+  {
+    id: 44,
+    key: "rate_shock_sensitivity",
+    title: "Rate Shock Sensitivity",
+    definition:
+      "Likely to react to rate changes (high churn or prior remarket) near renewal.",
+    flagLogic: "(churn≥0.6 OR remarkets_12m≥1) AND daysUntil(renewal)<60",
+    metric: "Count of households",
+    category: "Retention Radar",
+    fields: ["churn_risk_score_0_1", "remarkets_12m", "renewal_date"],
+  },
+  {
+    id: 45,
+    key: "producer_depth_delta",
+    title: "Producer Depth Delta",
+    definition: "Producer’s average depth vs agency average.",
+    flagLogic: "lines_count_by_producer vs agency avg",
+    metric: "Producers below/above target",
+    category: "Producer & Office Performance",
+    fields: ["producer_id", "lines_count"],
+  },
+  {
+    id: 46,
+    key: "producer_tbn_opportunity",
+    title: "Producer TBN Opportunity",
+    definition: "Hours reclaimable from Top-N split accounts per producer.",
+    flagLogic: "compute Time-Back for producer’s split accounts",
+    metric: "Hours per month",
+    category: "Producer & Office Performance",
+    fields: [
+      "producer_id",
+      "bundled_flag",
+      "remarkets_12m",
+      "est_minutes_per_remarket",
+      "service_touches_12m",
+      "avg_minutes_per_touch",
+    ],
+  },
+  {
+    id: 47,
+    key: "office_rl_outlier",
+    title: "Office RL Outlier",
+    definition: "Office remarketing load >1.5× agency average.",
+    flagLogic: "avg RL by office > 1.5 × agency avg",
+    metric: "Offices flagged",
+    category: "Producer & Office Performance",
+    fields: ["office_location", "remarkets_12m"],
+  },
+  {
+    id: 48,
+    key: "win_rate_after_outreach",
+    title: "Win Rate After Outreach",
+    definition: "Conversion rate post Top-N outreach (needs outcome events).",
+    flagLogic: "requires outreach + outcome events",
+    metric: "Win rate %",
+    category: "Revenue & Efficiency",
+    fields: ["event_log.outreach", "event_log.outcome"],
+  },
+  {
+    id: 49,
+    key: "data_confidence_gap",
+    title: "Data Confidence Gap",
+    definition: "Rows with low data_confidence or missing key fields.",
+    flagLogic:
+      "data_confidence<0.7 OR missing(renewal_date, lines_count, avg_minutes_per_touch)",
+    metric: "Count of rows",
+    category: "Data Quality",
+    fields: [
+      "data_confidence",
+      "renewal_date",
+      "lines_count",
+      "avg_minutes_per_touch",
+    ],
+  },
+  {
+    id: 50,
+    key: "template_compliance",
+    title: "Template Compliance",
+    definition: "Required headers present and valid types.",
+    flagLogic:
+      "All required headers exist: household_id, tenure_years, lines_count, bundled_flag, renewal_date, service_touches_12m, avg_minutes_per_touch, remarkets_12m, est_minutes_per_remarket",
+    metric: "PASS or list missing headers",
+    category: "Data Quality",
+    fields: [
+      "household_id",
+      "tenure_years",
+      "lines_count",
+      "bundled_flag",
+      "renewal_date",
+      "service_touches_12m",
+      "avg_minutes_per_touch",
+      "remarkets_12m",
+      "est_minutes_per_remarket",
+    ],
+  },
+];
+
+// -------------------------------
+// Helper: category list (for filters / tabs)
+// -------------------------------
+export const CATEGORIES: Category[] = [
+  "Core Scorecard",
+  "Growth Opportunities",
+  "Retention Radar",
+  "Service Drain",
+  "Revenue & Efficiency",
+  "Pricing & Appetite",
+  "Producer & Office Performance",
+  "Coverage & Endorsements",
+  "Data Quality",
+];
