@@ -1,3 +1,6 @@
+import { useMemo, useRef, useState } from "react";
+import Papa from "papaparse";
+
 /** ---------- Helpers & Types ---------- */
 type Row = Record<string, any>;
 type Insight = { n: number; title: string; count: string | number; badge: "urgent"|"opportunity"|"good"|"warn"|string; def: string };

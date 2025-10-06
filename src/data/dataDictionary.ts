@@ -26,6 +26,7 @@ export type Insight = {
   flagLogic: string;
   metric: string;
   fields: string[];
+  tags?: string[];
   category: Category;
   benchmarkNote?: string;
 };
