@@ -1,74 +1,88 @@
-// src/components/HorizontalInsightCarousel.tsx
 import React from "react";
-
-export type InsightCategory =
-  | "Growth Opportunities"
-  | "Retention Radar"
-  | "Service Drain"
-  | "Risk & Compliance";
-
-export type CarouselInsight = {
-  id: number;
-  title: string;
-  household_id?: string;
-  detection_date?: string;
-  category?: InsightCategory;
-  severity: "good" | "opportunity" | "warn" | "urgent";
-  impact?: number; // optional; defaults handled below
-};
+import type { HeatmapInsight } from "../types/insights";
 
 type Props = {
   title: string;
-  items: CarouselInsight[];
-  total?: number;
+  items: HeatmapInsight[];
+  emptyText?: string;
+  heightPx?: number; // inner scroll area height
 };
 
-const sevClass = (s: CarouselInsight["severity"]) =>
-  s === "urgent"
-    ? "bg-red-500/80"
-    : s === "warn"
-    ? "bg-yellow-500/80"
-    : s === "opportunity"
-    ? "bg-indigo-500/80"
-    : "bg-emerald-600/80";
+function sevClasses(sev: HeatmapInsight["severity"]) {
+  switch (sev) {
+    case "urgent":
+      return "bg-red-500/20 text-red-300 border-red-500/30";
+    case "warn":
+      return "bg-amber-500/20 text-amber-300 border-amber-500/30";
+    case "opportunity":
+      return "bg-indigo-500/20 text-indigo-300 border-indigo-500/30";
+    default:
+      return "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+  }
+}
 
-export default function HorizontalInsightCarousel({ title, items, total }: Props) {
+export default function HorizontalInsightCarousel({
+  title,
+  items,
+  emptyText = "Nothing to show.",
+  heightPx = 180,
+}: Props) {
+  const total = items.length;
+
   return (
-    <section className="card p-4 space-y-3">
-      <div className="flex items-end justify-between">
-        <h2 className="font-semibold">{title}</h2>
-        <div className="text-3xl font-extrabold tabular-nums">{total ?? items.length}</div>
+    <section className="card p-4">
+      {/* Header */}
+      <div className="mb-3 flex items-end justify-between">
+        <h2 className="font-bold">{title}</h2>
+        <div className="text-3xl font-extrabold tabular-nums leading-none">{total}</div>
       </div>
 
-      <div className="overflow-x-auto [-webkit-overflow-scrolling:touch]">
-        <div className="inline-flex gap-3 pr-2">
-          {items.map((i) => {
-            const hh = i.household_id ?? "—";
-            const impact = i.impact ?? 0;
-            const when = i.detection_date
-              ? new Date(i.detection_date).toLocaleDateString()
+      {/* Horizontal scroller */}
+      <div
+        className="overflow-x-auto overflow-y-hidden"
+        style={{ height: heightPx }}
+      >
+        <div className="flex gap-3 pr-2">
+          {items.map((it, idx) => {
+            const hh = it.household_id ?? "";
+            const dateLabel = it.detection_date
+              ? new Date(it.detection_date).toLocaleDateString()
               : "—";
-            const cat = i.category ?? "Growth Opportunities";
+
             return (
               <a
-                key={`${i.id}-${hh}`}
-                href={`/household?hh=${encodeURIComponent(hh)}&id=${i.id}`}
-                className="min-w-[220px] rounded bg-white/5 p-3 hover:bg-white/10"
+                key={`${hh}-${it.id}-${idx}`}
+                href={`/household?hh=${encodeURIComponent(hh)}&id=${it.id}`}
+                className="min-w-[240px] max-w-[260px] rounded-xl border border-white/10 bg-white/5 p-3 hover:bg-white/10"
               >
-                <div className="mb-1 flex items-center justify-between">
-                  <div className="text-xs opacity-70">#{i.id}</div>
-                  <span className={`badge ${sevClass(i.severity)}`}>{i.severity}</span>
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="text-xs px-2 py-0.5 rounded-full border whitespace-nowrap">
+                    {it.category}
+                  </span>
+                  <span
+                    className={`text-[11px] px-2 py-0.5 rounded-full border ${sevClasses(
+                      it.severity
+                    )}`}
+                  >
+                    {it.severity}
+                  </span>
                 </div>
-                <div className="text-sm font-medium line-clamp-2">{i.title || "Untitled"}</div>
-                <div className="mt-1 text-xs opacity-70">
-                  HH: {hh} • Impact: <span className="tabular-nums">{impact}</span>
+
+                <div className="font-semibold text-sm mb-1 line-clamp-2">
+                  #{it.id} {it.title}
                 </div>
-                <div className="text-[11px] opacity-60">{cat} • {when}</div>
+
+                <div className="text-xs opacity-70">
+                  HH: {hh || "—"}
+                  <br />
+                  Due: {dateLabel}
+                </div>
               </a>
             );
           })}
-          {items.length === 0 && (
-            <div className="text-sm text-slate-400 p-2">No items for current filters.</div>
+
+          {total === 0 && (
+            <div className="text-sm text-slate-400 self-center">{emptyText}</div>
           )}
         </div>
       </div>
