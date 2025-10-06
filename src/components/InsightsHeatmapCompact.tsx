@@ -1,4 +1,3 @@
-// src/components/InsightsHeatmapCompact.tsx
 import React from "react";
 
 export type InsightCategory =
@@ -8,163 +7,170 @@ export type InsightCategory =
   | "Risk & Compliance";
 
 export type HeatmapInsight = {
-  id: number;               // 1..50
+  id: number; // 1..50
   title: string;
   household_id?: string;
-  detection_date?: string;  // ISO date
+  detection_date?: string; // ISO date
   category: InsightCategory;
   severity: "good" | "opportunity" | "warn" | "urgent";
 };
 
 type Bin = {
-  label: string;
-  start: Date;
-  end: Date;
+  label: string;      // e.g., "Next 0–15d"
+  start: Date;        // window start
+  end: Date;          // window end (exclusive)
   items: HeatmapInsight[];
   counts: Record<HeatmapInsight["severity"], number>;
-  total: number;
 };
 
-type Props = {
+export type InsightsHeatmapCompactProps = {
   data: HeatmapInsight[];
-  /** One of 15 | 30 | 60 | 90 (days). Default 30. */
-  windowDays?: 15 | 30 | 60 | 90;
-  /** Only show two cards (current & next). Default true. */
+  /** 15 | 30 | 60 | 90 */
+  windowDays: 15 | 30 | 60 | 90;
+  /** show exactly two cards (first half, second half of window) */
   twoCardsOnly?: boolean;
-  /** Optional category filter; if empty or undefined, show all. */
+  /** optional category filter */
   categories?: InsightCategory[];
-  /** Called when a card is clicked. */
+  /** click anywhere on a card (bin) */
   onWindowClick?: (bin: Bin) => void;
-  /** Show a small legend strip. Default true. */
-  showLegend?: boolean;
+  /** click an individual insight; if omitted we render default <a> to /household/:id */
+  onItemClick?: (insight: HeatmapInsight) => void;
 };
-
-const sevList: HeatmapInsight["severity"][] = [
-  "urgent",
-  "warn",
-  "opportunity",
-  "good",
-];
 
 function inRange(d: Date, start: Date, end: Date) {
   return d >= start && d < end;
 }
 
-function labelFor(start: Date, end: Date) {
-  const f = (dt: Date) =>
-    dt.toLocaleDateString(undefined, { month: "short", day: "2-digit" });
-  return `${f(start)} → ${f(end)}`;
-}
-
-function makeBins(
-  src: HeatmapInsight[],
-  windowDays: 15 | 30 | 60 | 90,
-  categories?: InsightCategory[]
-): Bin[] {
-  const now = new Date();
-  const start0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // today @ 00:00
-
-  const windows = [
-    [0, windowDays],
-    [windowDays, windowDays * 2],
-  ] as const;
-
-  const filtered = categories?.length
-    ? src.filter((i) => categories.includes(i.category))
-    : src;
-
-  const bins: Bin[] = windows.map(([offStart, offEnd]) => {
-    const start = new Date(start0);
-    start.setDate(start.getDate() + offStart);
-    const end = new Date(start0);
-    end.setDate(end.getDate() + offEnd);
-
-    const items = filtered.filter((i) => {
-      if (!i.detection_date) return false;
-      const d = new Date(i.detection_date);
-      return inRange(d, start, end);
-    });
-
-    const counts = {
-      urgent: 0,
-      warn: 0,
-      opportunity: 0,
-      good: 0,
-    } as Record<HeatmapInsight["severity"], number>;
-
-    for (const it of items) counts[it.severity]++;
-
-    return {
-      label: labelFor(start, end),
-      start,
-      end,
-      items,
-      counts,
-      total: items.length,
-    };
-  });
-
-  return bins;
-}
-
 export default function InsightsHeatmapCompact({
   data,
-  windowDays = 30,
+  windowDays,
   twoCardsOnly = true,
   categories,
   onWindowClick,
-  showLegend = true,
-}: Props) {
-  const bins = makeBins(data, windowDays, categories);
-  const shown = twoCardsOnly ? bins.slice(0, 2) : bins;
+  onItemClick,
+}: InsightsHeatmapCompactProps) {
+  // filter by category
+  const filtered = React.useMemo(
+    () => (categories?.length ? data.filter((d) => categories.includes(d.category)) : data),
+    [data, categories]
+  );
+
+  const now = React.useMemo(() => new Date(), []);
+  const end = React.useMemo(() => {
+    const e = new Date(now);
+    e.setDate(e.getDate() + windowDays);
+    return e;
+  }, [now, windowDays]);
+
+  // Build two bins: first half and second half of the window
+  const half = Math.floor(windowDays / 2);
+  const firstStart = now;
+  const firstEnd = new Date(now); firstEnd.setDate(firstEnd.getDate() + half);
+  const secondStart = firstEnd;
+  const secondEnd = end;
+
+  const mkBin = (label: string, s: Date, e: Date): Bin => {
+    const items = filtered.filter((it) => {
+      if (!it.detection_date) return false;
+      const d = new Date(it.detection_date);
+      return inRange(d, s, e);
+    });
+    const counts: Bin["counts"] = { good: 0, opportunity: 0, warn: 0, urgent: 0 };
+    items.forEach((i) => (counts[i.severity] = (counts[i.severity] || 0) + 1));
+    return { label, start: s, end: e, items, counts };
+  };
+
+  const bins: Bin[] = [
+    mkBin(`Next 0–${half}d`, firstStart, firstEnd),
+    mkBin(`Next ${half}–${windowDays}d`, secondStart, secondEnd),
+  ];
+
+  const Pill: React.FC<{ c: HeatmapInsight["severity"]; n: number }> = ({ c, n }) => (
+    <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-xs">
+      <span
+        className={`h-2 w-2 rounded-full ${
+          c === "urgent" ? "bg-red-400"
+          : c === "warn" ? "bg-yellow-400"
+          : c === "opportunity" ? "bg-indigo-400"
+          : "bg-emerald-400"
+        }`}
+      />
+      {n}
+    </span>
+  );
+
+  const openItem = (it: HeatmapInsight) => {
+    if (onItemClick) return onItemClick(it);
+    // default navigation
+    const hh = encodeURIComponent(it.household_id || "");
+    window.location.href = `/household/${hh}?insight=${it.id}`;
+  };
 
   return (
-    <div className="card p-4">
-      <h3 className="mb-3 font-semibold">Upcoming Insights (Compact)</h3>
-
-      <div className="grid gap-3 md:grid-cols-2">
-        {shown.map((bin, idx) => (
-          <button
-            key={idx}
-            type="button"
-            onClick={() => onWindowClick?.(bin)}
-            className="rounded-xl border border-white/10 bg-white/5 p-3 text-left hover:bg-white/10"
-          >
-            <div className="mb-1 text-sm text-slate-300">{bin.label}</div>
-            <div className="text-lg font-bold">
-              {bin.total} insight{bin.total === 1 ? "" : "s"}
+    <div className="grid gap-4 md:grid-cols-2">
+      {bins.map((bin, idx) => (
+        <div
+          key={idx}
+          role="button"
+          tabIndex={0}
+          onClick={() => onWindowClick?.(bin)}
+          onKeyDown={(e) => e.key === "Enter" && onWindowClick?.(bin)}
+          className="rounded-2xl border border-white/10 bg-white/5 p-4 outline-none hover:bg-white/10 cursor-pointer"
+        >
+          <div className="mb-2 flex items-center justify-between">
+            <div className="font-semibold">{bin.label}</div>
+            <div className="flex gap-2">
+              <Pill c="urgent" n={bin.counts.urgent} />
+              <Pill c="warn" n={bin.counts.warn} />
+              <Pill c="opportunity" n={bin.counts.opportunity} />
+              <Pill c="good" n={bin.counts.good} />
             </div>
+          </div>
 
-            <div className="mt-2 grid grid-cols-4 gap-2 text-xs">
-              {sevList.map((s) => (
-                <div key={s} className="flex items-center gap-1">
-                  <span
-                    className={`inline-block h-2 w-2 rounded-full ${
-                      s === "urgent"
-                        ? "bg-red-400"
-                        : s === "warn"
-                        ? "bg-amber-400"
-                        : s === "opportunity"
-                        ? "bg-indigo-400"
-                        : "bg-emerald-400"
-                    }`}
-                  />
-                  <span className="text-slate-300">{bin.counts[s]}</span>
+          {/* Top 6 insights list inside the card, each row clickable */}
+          <div className="space-y-1">
+            {bin.items.slice(0, 6).map((it, i) => (
+              <div
+                key={i}
+                className="flex items-center justify-between rounded bg-white/5 px-2 py-1 hover:bg-white/10"
+                onClick={(e) => {
+                  e.stopPropagation(); // don't bubble to card click
+                  openItem(it);
+                }}
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm">{it.title}</div>
+                  <div className="truncate text-xs text-slate-400">
+                    HH: {it.household_id || "—"} • {it.category}
+                  </div>
                 </div>
-              ))}
-            </div>
-          </button>
-        ))}
-      </div>
+                <span
+                  className={`ml-2 h-2 w-2 flex-none rounded-full ${
+                    it.severity === "urgent"
+                      ? "bg-red-400"
+                      : it.severity === "warn"
+                      ? "bg-yellow-400"
+                      : it.severity === "opportunity"
+                      ? "bg-indigo-400"
+                      : "bg-emerald-400"
+                  }`}
+                  title={it.severity}
+                />
+              </div>
+            ))}
 
-      {showLegend && (
-        <div className="mt-3 text-xs text-slate-400">
-          <span className="mr-2 inline-block h-2 w-2 rounded-full bg-red-400" /> urgent
-          <span className="ml-3 mr-2 inline-block h-2 w-2 rounded-full bg-amber-400" /> warn
-          <span className="ml-3 mr-2 inline-block h-2 w-2 rounded-full bg-indigo-400" /> opportunity
-          <span className="ml-3 mr-2 inline-block h-2 w-2 rounded-full bg-emerald-400" /> good
+            {bin.items.length === 0 && (
+              <div className="text-xs text-slate-400">No insights in this window.</div>
+            )}
+
+            {bin.items.length > 6 && (
+              <div className="pt-1 text-right text-xs text-slate-400">
+                +{bin.items.length - 6} more
+              </div>
+            )}
+          </div>
         </div>
-      )}
+      ))}
     </div>
   );
 }
