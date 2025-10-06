@@ -5,121 +5,97 @@ import Gauge from "../components/Gauge";
 import Bullet from "../components/Bullet";
 import Spark from "../components/Spark";
 import InsightCard from "../components/InsightCard";
-import InsightsHeatmap from "../components/InsightsHeatmap";
 
-import { mockMetrics, mockInsights } from "../data/mock";
+// Compact, 2-tile calendar
+import InsightsHeatmapCompact, {
+  CalendarBin,
+  InsightCategory,
+  HeatmapInsight,
+} from "../components/InsightsHeatmapCompact";
+
 import { bands } from "../config/benchmarks";
+import { mockMetrics, mockInsights } from "../data/mock";
 
-// ---------- Types ----------
-type UploadedRow = Record<string, any>;
+// If you created the simple app store:
+import { getMetrics, getInsights } from "../stores";
 
-type InsightCategory =
-  | "Growth Opportunities"
-  | "Retention Radar"
-  | "Service Drain"
-  | "Risk & Compliance";
+// ---------------- Helpers & hooks ----------------
 
-type HeatmapInsight = {
-  id: number;                // 1..50 (dictionary id)
-  title: string;
-  household_id?: string;
-  detection_date?: string;   // ISO date
-  category: InsightCategory;
-  severity: "good" | "opportunity" | "warn" | "urgent";
-};
-
-declare global {
-  interface Window {
-    __BB_METRICS__?: any;
-    __BB_ROWS__?: UploadedRow[];
-    __BB_INSIGHTS__?: HeatmapInsight[];
-  }
-}
-
-// ---------- Helpers ----------
 function useMetrics() {
-  return window.__BB_METRICS__ || mockMetrics;
-}
-function useRows(): UploadedRow[] {
-  return Array.isArray(window.__BB_ROWS__) ? window.__BB_ROWS__! : [];
+  return getMetrics?.() || mockMetrics;
 }
 
-// Fallback insight generator so the page renders before Upload
-function fallbackBuildInsightsFromRows(rows: UploadedRow[]): HeatmapInsight[] {
-  if (Array.isArray(window.__BB_INSIGHTS__) && window.__BB_INSIGHTS__!.length) {
-    return window.__BB_INSIGHTS__!;
-  }
-  const sampleTitles = [
-    "Bundling Gap",
-    "Umbrella Opportunity",
-    "Renewal No Review Window",
-    "High RL Segment",
-  ];
-  const sampleCategories: InsightCategory[] = [
-    "Growth Opportunities",
-    "Growth Opportunities",
-    "Retention Radar",
-    "Service Drain",
-  ];
-  const sampleSev: HeatmapInsight["severity"][] = [
-    "opportunity",
-    "opportunity",
-    "urgent",
-    "warn",
-  ];
-  const items: HeatmapInsight[] = [];
-  const N = Math.max(rows.length || 48, 12);
-  for (let i = 0; i < Math.min(N, 96); i++) {
-    const d = new Date();
-    d.setDate(1); // align to month
-    d.setMonth(d.getMonth() + (i % 12));
-    items.push({
-      id: ((i % 4) + 1) as number,
-      title: sampleTitles[i % sampleTitles.length],
-      household_id: rows[i]?.household_id || `HH-${i + 1}`,
-      detection_date: d.toISOString(),
-      category: sampleCategories[i % sampleCategories.length],
-      severity: sampleSev[i % sampleSev.length],
-    });
-  }
-  return items;
+function useInsights(): HeatmapInsight[] {
+  // Prefer store. If empty, return an empty array (compact heatmap tolerates it)
+  const fromStore = (getInsights?.() || []) as HeatmapInsight[];
+  return Array.isArray(fromStore) ? fromStore : [];
 }
 
-const severityRank: Record<HeatmapInsight["severity"], number> = {
+const ALL_CATEGORIES: InsightCategory[] = [
+  "Growth Opportunities",
+  "Retention Radar",
+  "Service Drain",
+  "Risk & Compliance",
+];
+
+const SEV_RANK: Record<HeatmapInsight["severity"], number> = {
   urgent: 3,
   warn: 2,
   opportunity: 1,
   good: 0,
 };
 
-// Sort: most urgent first, then nearest upcoming date
-function sortByUrgencyThenDate(a: HeatmapInsight, b: HeatmapInsight) {
-  const r = severityRank[b.severity] - severityRank[a.severity];
-  if (r !== 0) return r;
-  const ad = a.detection_date ? Date.parse(a.detection_date) : Number.POSITIVE_INFINITY;
-  const bd = b.detection_date ? Date.parse(b.detection_date) : Number.POSITIVE_INFINITY;
-  return ad - bd;
-}
+// ---------------- Component ----------------
 
-// ---------- Page ----------
 export default function Principal() {
   const m = useMetrics();
-  const rows = useRows();
-  const insights = fallbackBuildInsightsFromRows(rows);
+  const insights = useInsights();
 
-  // Calendar modal state
+  // 15/30/60/90 control
+  const [rangeDays, setRangeDays] = React.useState<15 | 30 | 60 | 90>(30);
+
+  // Category filter (multi-select). Empty = all
+  const [catFilter, setCatFilter] = React.useState<InsightCategory[]>([]);
+
+  // Modal for a clicked calendar bin
   const [open, setOpen] = React.useState(false);
-  const [selectedBin, setSelectedBin] = React.useState<any>(null);
+  const [selectedBin, setSelectedBin] = React.useState<CalendarBin | null>(null);
 
-  // Build Top-10 lists
-  const top10Growth = insights
+  // Category toggle handler
+  function toggleCategory(cat: InsightCategory) {
+    setCatFilter((prev) =>
+      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
+    );
+  }
+
+  // Build top 10 lists (most urgent upcoming)
+  const now = Date.now();
+  const upcoming = insights.filter((i) => {
+    const t = i.detection_date ? Date.parse(i.detection_date) : NaN;
+    return !isNaN(t) && t >= now;
+  });
+
+  const growthTop = upcoming
     .filter((i) => i.category === "Growth Opportunities")
-    .sort(sortByUrgencyThenDate)
+    .sort((a, b) => {
+      // urgency, then soonest
+      const r = SEV_RANK[b.severity] - SEV_RANK[a.severity];
+      if (r !== 0) return r;
+      const ad = a.detection_date ? Date.parse(a.detection_date) : Number.POSITIVE_INFINITY;
+      const bd = b.detection_date ? Date.parse(b.detection_date) : Number.POSITIVE_INFINITY;
+      return ad - bd;
+    })
     .slice(0, 10);
 
-  const top10Retention = insights
+  const retentionTop = upcoming
     .filter((i) => i.category === "Retention Radar")
-    .sort(sortByUrgencyThenDate)
+    .sort((a, b) => {
+      const r = SEV_RANK[b.severity] - SEV_RANK[a.severity];
+      if (r !== 0) return r;
+      const ad = a.detection_date ? Date.parse(a.detection_date) : Number.POSITIVE_INFINITY;
+      const bd = b.detection_date ? Date.parse(b.detection_date) : Number.POSITIVE_INFINITY;
+      return ad - bd;
+    })
     .slice(0, 10);
 
   return (
@@ -161,136 +137,170 @@ export default function Principal() {
         <Spark label="Tenure Momentum (sim)" points={[6.4, 6.5, 6.6, 6.7, 6.8]} />
       </div>
 
-      {/* Upcoming Insights Calendar */}
+      {/* Upcoming (compact) */}
       <div className="card p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-bold">Upcoming Insights (12-month view)</h2>
-          <div className="flex gap-2 text-xs">
-            <span className="badge border-white/20">Monthly</span>
+        <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <h2 className="font-bold">Upcoming Insights</h2>
+
+          {/* Controls: range + category filter */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Range */}
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-slate-400">Range:</span>
+              {[15, 30, 60, 90].map((d) => (
+                <button
+                  key={d}
+                  className={`badge border-white/20 ${
+                    rangeDays === d ? "bg-white/20" : ""
+                  }`}
+                  onClick={() => setRangeDays(d as 15 | 30 | 60 | 90)}
+                >
+                  {d}d
+                </button>
+              ))}
+            </div>
+
+            {/* Categories */}
+            <div className="ml-2 flex items-center gap-1">
+              <span className="text-xs text-slate-400">Categories:</span>
+              {ALL_CATEGORIES.map((c) => {
+                const on = catFilter.includes(c);
+                return (
+                  <button
+                    key={c}
+                    className={`badge border-white/20 ${on ? "bg-white/20" : ""}`}
+                    onClick={() => toggleCategory(c)}
+                  >
+                    {c}
+                  </button>
+                );
+              })}
+              {/* Clear */}
+              <button
+                className="badge border-white/20"
+                onClick={() => setCatFilter([])}
+              >
+                Clear
+              </button>
+            </div>
           </div>
         </div>
 
-        <InsightsHeatmap
+        <InsightsHeatmapCompact
           data={insights}
-          months={12}
-          defaultCategories={[]}
-          onMonthClick={(bin) => {
+          rangeDays={rangeDays}
+          categories={catFilter}
+          onTileClick={(bin: CalendarBin) => {
             setSelectedBin(bin);
             setOpen(true);
           }}
         />
       </div>
 
-      {/* Month click modal */}
+      {/* Clicked bin modal */}
       {open && (
         <>
           <div className="drawer-overlay" onClick={() => setOpen(false)} />
-          <div className="card fixed left-1/2 top-20 z-50 w-[90vw] max-w-2xl -translate-x-1/2 p-4">
+          <div className="card fixed left-1/2 top-20 z-50 w-[92vw] max-w-2xl -translate-x-1/2 p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="font-semibold">{selectedBin?.label || "Selected Period"}</h3>
+              <h3 className="font-semibold">{selectedBin?.label || "Selected Window"}</h3>
               <button className="badge border-white/20" onClick={() => setOpen(false)}>
                 Close
               </button>
             </div>
+
             <div className="max-h-[60vh] overflow-auto space-y-2">
-              {(selectedBin?.items || []).map((it: HeatmapInsight, idx: number) => (
-                <div key={idx} className="flex items-center justify-between rounded bg-white/5 p-2">
+              {(selectedBin?.items || []).map((it, idx) => (
+                <div
+                  key={`${it.household_id || "HH"}-${it.id}-${idx}`}
+                  className="flex items-center justify-between rounded bg-white/5 p-2"
+                >
                   <div className="text-sm">
-                    <div className="font-medium">{it.title}</div>
+                    <div className="font-medium">#{it.id} {it.title}</div>
                     <div className="text-xs text-slate-400">
-                      HH: {it.household_id || "—"} • Category: {it.category} • Severity:{" "}
-                      {it.severity}
+                      HH: {it.household_id || "—"} • {it.category} • {it.severity}
+                      {it.detection_date ? ` • ${new Date(it.detection_date).toLocaleDateString()}` : ""}
                     </div>
                   </div>
                   <a
                     className="badge border-white/20"
-                    href={`/household/${encodeURIComponent(String(it.household_id || ""))}?id=${
-                      it.id
-                    }`}
+                    href={`/household?hh=${encodeURIComponent(it.household_id || "")}&id=${it.id}`}
                   >
                     View
                   </a>
                 </div>
               ))}
+
               {(!selectedBin?.items || selectedBin.items.length === 0) && (
-                <div className="text-sm text-slate-400">No insights in this period.</div>
+                <div className="text-sm text-slate-400">No insights in this window.</div>
               )}
             </div>
           </div>
         </>
       )}
 
-      {/* Top 10 Growth Opportunities */}
-      <div className="card p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-bold">Top 10 Growth Opportunities</h2>
-          <a className="badge border-white/20" href="/insights?cat=Growth%20Opportunities">
-            View all
-          </a>
-        </div>
-        <ul className="space-y-2">
-          {top10Growth.map((i, idx) => (
-            <li
-              key={`growth-${idx}`}
-              className="flex items-center justify-between rounded bg-white/5 p-2"
-            >
-              <div className="text-sm">
-                <div className="font-medium">{i.title}</div>
-                <div className="text-xs text-slate-400">
-                  HH: {i.household_id || "—"} • Severity: {i.severity}
-                  {i.detection_date ? ` • Due: ${new Date(i.detection_date).toLocaleDateString()}` : ""}
-                </div>
-              </div>
-              <a
-                className="badge border-white/20"
-                href={`/household/${encodeURIComponent(String(i.household_id || ""))}?id=${i.id}`}
+      {/* Top 10 lists */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="card p-4">
+          <h3 className="mb-2 font-semibold">Top 10 Growth (Upcoming)</h3>
+          <ul className="space-y-2 text-sm">
+            {growthTop.map((i, idx) => (
+              <li
+                key={`growth-${i.id}-${i.household_id}-${idx}`}
+                className="flex items-center justify-between rounded bg-white/5 p-2"
               >
-                Open
-              </a>
-            </li>
-          ))}
-          {top10Growth.length === 0 && (
-            <li className="text-sm text-slate-400">No growth opportunities found.</li>
-          )}
-        </ul>
+                <div>
+                  <div className="font-medium">#{i.id} {i.title}</div>
+                  <div className="text-xs text-slate-400">
+                    HH: {i.household_id || "—"} • {i.severity}
+                    {i.detection_date ? ` • ${new Date(i.detection_date).toLocaleDateString()}` : ""}
+                  </div>
+                </div>
+                <a
+                  className="badge border-white/20"
+                  href={`/household?hh=${encodeURIComponent(i.household_id || "")}&id=${i.id}`}
+                >
+                  View
+                </a>
+              </li>
+            ))}
+            {growthTop.length === 0 && (
+              <li className="text-xs text-slate-400">No upcoming growth items.</li>
+            )}
+          </ul>
+        </div>
+
+        <div className="card p-4">
+          <h3 className="mb-2 font-semibold">Top 10 Retention Radar (Upcoming)</h3>
+          <ul className="space-y-2 text-sm">
+            {retentionTop.map((i, idx) => (
+              <li
+                key={`ret-${i.id}-${i.household_id}-${idx}`}
+                className="flex items-center justify-between rounded bg-white/5 p-2"
+              >
+                <div>
+                  <div className="font-medium">#{i.id} {i.title}</div>
+                  <div className="text-xs text-slate-400">
+                    HH: {i.household_id || "—"} • {i.severity}
+                    {i.detection_date ? ` • ${new Date(i.detection_date).toLocaleDateString()}` : ""}
+                  </div>
+                </div>
+                <a
+                  className="badge border-white/20"
+                  href={`/household?hh=${encodeURIComponent(i.household_id || "")}&id=${i.id}`}
+                >
+                  View
+                </a>
+              </li>
+            ))}
+            {retentionTop.length === 0 && (
+              <li className="text-xs text-slate-400">No upcoming retention items.</li>
+            )}
+          </ul>
+        </div>
       </div>
 
-      {/* Top 10 Retention Radar */}
-      <div className="card p-4">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-bold">Top 10 Retention Radar</h2>
-          <a className="badge border-white/20" href="/insights?cat=Retention%20Radar">
-            View all
-          </a>
-        </div>
-        <ul className="space-y-2">
-          {top10Retention.map((i, idx) => (
-            <li
-              key={`ret-${idx}`}
-              className="flex items-center justify-between rounded bg-white/5 p-2"
-            >
-              <div className="text-sm">
-                <div className="font-medium">{i.title}</div>
-                <div className="text-xs text-slate-400">
-                  HH: {i.household_id || "—"} • Severity: {i.severity}
-                  {i.detection_date ? ` • Due: ${new Date(i.detection_date).toLocaleDateString()}` : ""}
-                </div>
-              </div>
-              <a
-                className="badge border-white/20"
-                href={`/household/${encodeURIComponent(String(i.household_id || ""))}?id=${i.id}`}
-              >
-                Open
-              </a>
-            </li>
-          ))}
-          {top10Retention.length === 0 && (
-            <li className="text-sm text-slate-400">No retention items found.</li>
-          )}
-        </ul>
-      </div>
-
-      {/* (Optional) Suggested Insight Cards row you already had */}
+      {/* Example “suggested actions” using your existing mock cards */}
       <div className="grid gap-4 md:grid-cols-3">
         {mockInsights.slice(0, 3).map((ins) => (
           <InsightCard
