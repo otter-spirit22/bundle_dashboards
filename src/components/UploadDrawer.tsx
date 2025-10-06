@@ -2,17 +2,15 @@ import { useRef, useState } from "react";
 import { parseFile } from "../data/loader";
 import { computeAllMetrics } from "../data/metrics";
 
-// NEW: pull in the shared store and the insights aggregator
-import { useDataStore } from "@/data/store";
-import { computeInsights50 } from "@/data/insightsAggregator";
+// Store setters
+import { setRows, setMetrics, setInsights } from "../stores";
+// Optional aggregator: comment out if you haven't added it yet
+import { computeInsights50 } from "../data/insightsAggregator";
 
 export default function UploadDrawer() {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<string>("");
   const fileRef = useRef<HTMLInputElement>(null);
-
-  // NEW: store setters
-  const { setData, setInsights } = useDataStore();
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -23,19 +21,36 @@ export default function UploadDrawer() {
 
       setStatus(`Parsed ${rows.length} rows. Computing metrics…`);
       const metrics = computeAllMetrics(rows);
-      (window as any).__BB_METRICS__ = metrics; // keep your current KPI demo path
 
-      // NEW: push rows and computed insights into the app-wide store
-      setStatus("Computing insights…");
-      setData({ rows });
-      const insights = computeInsights50(rows);
-      setInsights(insights);
+      // Store in our global store
+      setRows(rows);
+      setMetrics(metrics);
 
-      setStatus(
-        `Done. BenchScore ${metrics.benchScore}, Depth ${metrics.coverageDepthPct.toFixed(
-          1
-        )}%. Insights: ${insights.length}`
-      );
+      // Keep your existing window path for KPIs that still read it
+      (window as any).__BB_METRICS__ = metrics;
+      (window as any).__BB_ROWS__ = rows;
+
+      // Optional insights computation (requires src/data/insightsAggregator.ts)
+      try {
+        setStatus("Computing insights…");
+        const insights = computeInsights50 ? computeInsights50(rows) : [];
+        setInsights(insights);
+        (window as any).__BB_INSIGHTS__ = insights;
+        setStatus(
+          `Done. BenchScore ${metrics.benchScore}, Depth ${metrics.coverageDepthPct.toFixed(
+            1
+          )}%. Insights: ${insights.length}`
+        );
+      } catch {
+        // If aggregator not present, don’t fail the upload
+        setInsights([]);
+        setStatus(
+          `Done. BenchScore ${metrics.benchScore}, Depth ${metrics.coverageDepthPct.toFixed(
+            1
+          )}%. (Insights pending aggregator)`
+        );
+      }
+
       alert(
         "Data loaded. KPIs/heatmap will update on dashboards. Visit Principal/Producer/AM or Insights-50."
       );
