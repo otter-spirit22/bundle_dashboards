@@ -27,6 +27,7 @@ export type Insight = {
   metric: string;
   fields: string[];
   category: Category;
+  benchmarkNote?: string;
 };
 
 export const CATEGORIES: Category[] = [
