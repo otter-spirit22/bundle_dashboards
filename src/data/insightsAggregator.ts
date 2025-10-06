@@ -1,88 +1,117 @@
 // src/data/insightsAggregator.ts
-import { format, addMonths, startOfMonth, isBefore, isAfter } from "date-fns";
-import { ComputedInsight, INSIGHT_CATEGORY_MAP, InsightCategory, SEVERITY_SCORE } from "./insightCategories";
+// Minimal, safe implementation that produces heatmap-friendly insights.
+// You can swap the rules later with your full 1..50 logic.
 
-// Helper: build YYYY-MM
-export function toMonthKey(dateISO: string): string {
-  const d = new Date(dateISO);
-  return format(d, "yyyy-MM");
+export type InsightCategory =
+  | "Growth Opportunities"
+  | "Retention Radar"
+  | "Service Drain"
+  | "Risk & Compliance";
+
+export type HeatmapInsight = {
+  id: number; // 1..50
+  title: string;
+  household_id?: string;
+  detection_date?: string; // ISO
+  category: InsightCategory;
+  severity: "good" | "opportunity" | "warn" | "urgent";
+};
+
+type Row = Record<string, any>;
+
+function monthOffsetISO(offset: number) {
+  const d = new Date();
+  d.setMonth(d.getMonth() + offset);
+  return d.toISOString();
 }
 
-export interface MonthBin {
-  monthKey: string;             // "2025-01"
-  total: number;                // count of insights (after filter)
-  intensity: number;            // sum of severity scores (for color)
-  byCategory: Record<InsightCategory, number>;
-  items: ComputedInsight[];
-}
+// very small demo rule set (map to real rules later)
+export function computeInsights50(rows: Row[]): HeatmapInsight[] {
+  if (!rows || rows.length === 0) return [];
 
-export function monthsForward(n: number = 12): string[] {
-  const out: string[] = [];
-  const start = startOfMonth(new Date());
-  for (let i = 0; i < n; i++) {
-    out.push(format(addMonths(start, i), "yyyy-MM"));
+  const out: HeatmapInsight[] = [];
+
+  // 1. Bundling Gap
+  for (const r of rows) {
+    const home = Number(r.home_flag || 0);
+    const auto = Number(r.auto_flag || 0);
+    const carriersDiff =
+      r.primary_carrier && r.secondary_carrier_optional
+        ? r.primary_carrier !== r.secondary_carrier_optional
+        : false;
+
+    if ((home && auto && carriersDiff) || home + auto === 1) {
+      out.push({
+        id: 1,
+        title: "Bundling Gap",
+        household_id: String(r.household_id ?? ""),
+        detection_date: monthOffsetISO(0),
+        category: "Growth Opportunities",
+        severity: "opportunity",
+      });
+    }
   }
+
+  // 15. Renewal No Review Window (simplified)
+  for (const r of rows) {
+    const renewal = r.renewal_date ? new Date(r.renewal_date) : null;
+    const reviewed = r.last_reviewed_date ? new Date(r.last_reviewed_date) : null;
+    if (renewal) {
+      const daysToRenewal = Math.floor(
+        (renewal.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+      );
+      const daysSinceReview = reviewed
+        ? Math.floor((Date.now() - reviewed.getTime()) / (1000 * 60 * 60 * 24))
+        : 9999;
+      if (daysToRenewal < 30 && daysSinceReview > 60) {
+        out.push({
+          id: 15,
+          title: "Renewal No Review Window",
+          household_id: String(r.household_id ?? ""),
+          detection_date: monthOffsetISO(0),
+          category: "Retention Radar",
+          severity: "urgent",
+        });
+      }
+    }
+  }
+
+  // 21. High Minutes HH (top decile by touches * minutes)
+  const mins = rows.map(
+    (r) => Number(r.service_touches_12m || 0) * Number(r.avg_minutes_per_touch || 0)
+  );
+  const sorted = [...mins].filter((x) => !isNaN(x)).sort((a, b) => a - b);
+  const p90 = sorted.length ? sorted[Math.floor(sorted.length * 0.9)] : Infinity;
+
+  rows.forEach((r) => {
+    const m = Number(r.service_touches_12m || 0) * Number(r.avg_minutes_per_touch || 0);
+    if (m >= p90 && isFinite(m)) {
+      out.push({
+        id: 21,
+        title: "High Minutes HH",
+        household_id: String(r.household_id ?? ""),
+        detection_date: monthOffsetISO(1),
+        category: "Service Drain",
+        severity: "warn",
+      });
+    }
+  });
+
+  // 44. Rate Shock Sensitivity (simplified)
+  rows.forEach((r) => {
+    const churn = Number(r.churn_risk_score_0_1 || 0);
+    const remarkets = Number(r.remarkets_12m || 0);
+    if (churn >= 0.6 || remarkets >= 1) {
+      out.push({
+        id: 44,
+        title: "Rate Shock Sensitivity",
+        household_id: String(r.household_id ?? ""),
+        detection_date: monthOffsetISO(2),
+        category: "Retention Radar",
+        severity: churn >= 0.6 ? "urgent" : "opportunity",
+      });
+    }
+  });
+
   return out;
-}
-
-/**
- * prepareInsights:
- * - Normalize detection_date and monthKey
- * - Filter to window (today .. +N months)
- * - Filter by selected categories (if any)
- */
-export function prepareInsights(
-  raw: Omit<ComputedInsight, "monthKey">[],
-  opts?: {
-    months?: number;
-    categories?: InsightCategory[];
-  }
-): MonthBin[] {
-  const months = monthsForward(opts?.months ?? 12);
-  const monthSet = new Set(months);
-  const selected = new Set(opts?.categories ?? []);
-
-  const bins: Record<string, MonthBin> = {};
-  months.forEach(mk => {
-    bins[mk] = {
-      monthKey: mk,
-      total: 0,
-      intensity: 0,
-      byCategory: {
-        "Growth Opportunities": 0,
-        "Retention Radar": 0,
-        "Service Drain": 0,
-        "Risk & Claims": 0,
-        "Data Quality": 0,
-      },
-      items: []
-    };
-  });
-
-  const now = new Date();
-  const horizon = addMonths(startOfMonth(now), (opts?.months ?? 12));
-
-  raw.forEach(r => {
-    const detectionISO = r.detection_date ?? new Date().toISOString();
-    const d = new Date(detectionISO);
-    if (isBefore(d, now) || isAfter(d, horizon)) return;
-
-    const monthKey = toMonthKey(detectionISO);
-    if (!monthSet.has(monthKey)) return;
-
-    // attach derived fields
-    const cat = r.category ?? INSIGHT_CATEGORY_MAP[r.id];
-    const item: ComputedInsight = { ...r, category: cat, monthKey };
-
-    // category filter (if provided)
-    if (selected.size && !selected.has(item.category)) return;
-
-    const bin = bins[monthKey];
-    bin.total += 1;
-    bin.intensity += SEVERITY_SCORE[item.severity];
-    bin.byCategory[item.category] = (bin.byCategory[item.category] ?? 0) + 1;
-    bin.items.push(item);
-  });
-
-  return months.map(mk => bins[mk]);
 }
