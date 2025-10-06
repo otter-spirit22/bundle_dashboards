@@ -1,7 +1,7 @@
 // src/components/InsightsHeatmapCompact.tsx
 import React from "react";
 
-// Keep these in sync with your app-wide types
+/** ----- Shared types (exported so pages can import) ----- */
 export type InsightCategory =
   | "Growth Opportunities"
   | "Retention Radar"
@@ -9,127 +9,199 @@ export type InsightCategory =
   | "Risk & Compliance";
 
 export type HeatmapInsight = {
-  id: number; // 1..50
+  id: number;                      // 1..50 (which insight)
   title: string;
   household_id?: string;
-  detection_date?: string; // ISO
+  detection_date?: string;         // ISO date (used for placement)
   category: InsightCategory;
   severity: "good" | "opportunity" | "warn" | "urgent";
 };
 
 export type CalendarBin = {
-  label: string;            // e.g., "Next 15 days"
+  label: string;                   // e.g., "Next 30 days"
   start: Date;
   end: Date;
-  items: HeatmapInsight[];  // insights that fall in [start, end]
+  items: HeatmapInsight[];
 };
 
+/** ----- Props for the compact, two-tile heatmap ----- */
 type Props = {
-  /** All insights (already computed elsewhere) */
+  /** All insights (we’ll filter by date range + category) */
   data: HeatmapInsight[];
-
-  /** Primary window size. The component will show TWO tiles:
-   *  [0, rangeDays) and [rangeDays, 2*rangeDays).
-   */
+  /** One of 15 | 30 | 60 | 90; shows *two* adjacent windows */
   rangeDays: 15 | 30 | 60 | 90;
-
-  /** Category filter to apply (empty array = no filter) */
-  categories: InsightCategory[];
-
-  /** Click handler for a tile (bin) */
-  onTileClick: (bin: CalendarBin) => void;
+  /** Optional multi-select categories; empty/undefined => include all */
+  categories?: InsightCategory[];
+  /** Click handler returns the bin (with items) */
+  onTileClick?: (bin: CalendarBin) => void;
 };
 
-function inRange(dt: Date, start: Date, end: Date) {
-  return dt >= start && dt <= end;
+/** ----- Helpers ----- */
+const SEV_ORDER: HeatmapInsight["severity"][] = ["good", "opportunity", "warn", "urgent"];
+
+function inRange(d: Date, start: Date, end: Date) {
+  return d >= start && d < end;
 }
 
-function parseISOorNull(iso?: string) {
-  if (!iso) return null;
-  const t = Date.parse(iso);
-  return isNaN(t) ? null : new Date(t);
+function formatRangeLabel(start: Date, end: Date, fallback: string) {
+  try {
+    const s = start.toLocaleDateString();
+    const e = end.toLocaleDateString();
+    return `${s} → ${e}`;
+  } catch {
+    return fallback;
+  }
 }
 
-const sevRank: Record<HeatmapInsight["severity"], number> = {
-  urgent: 3,
-  warn: 2,
-  opportunity: 1,
-  good: 0,
-};
+function badgeClass(sev: HeatmapInsight["severity"]) {
+  switch (sev) {
+    case "urgent":
+      return "bg-red-500/80 text-white";
+    case "warn":
+      return "bg-amber-500/80 text-white";
+    case "opportunity":
+      return "bg-indigo-500/80 text-white";
+    default:
+      return "bg-emerald-500/80 text-white";
+  }
+}
 
+/** Summarize a bin’s items with tiny severity dots + count */
+function BinSummary({ items }: { items: HeatmapInsight[] }) {
+  const counts: Record<HeatmapInsight["severity"], number> = {
+    good: 0,
+    opportunity: 0,
+    warn: 0,
+    urgent: 0,
+  };
+  for (const it of items) counts[it.severity]++;
+
+  const total = items.length;
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="opacity-70">{total} item{total === 1 ? "" : "s"}</span>
+      <div className="ml-2 flex items-center gap-1">
+        {SEV_ORDER.map((s) =>
+          counts[s] ? (
+            <span
+              key={s}
+              title={`${s}: ${counts[s]}`}
+              className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 ${badgeClass(
+                s
+              )}`}
+            >
+              {counts[s]}
+            </span>
+          ) : null
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** ----- Component ----- */
 export default function InsightsHeatmapCompact({
   data,
   rangeDays,
-  categories,
+  categories = [],
   onTileClick,
 }: Props) {
-  const now = new Date();
-  now.setHours(0, 0, 0, 0);
+  const now = React.useMemo(() => new Date(), []);
+  const start1 = React.useMemo(() => new Date(now.getFullYear(), now.getMonth(), now.getDate()), [now]);
+  const end1 = React.useMemo(() => new Date(start1.getTime() + rangeDays * 24 * 60 * 60 * 1000), [start1, rangeDays]);
 
-  // Build two contiguous windows: [0, rangeDays) and [rangeDays, 2*rangeDays)
-  const start1 = new Date(now);
-  const end1 = new Date(now);
-  end1.setDate(end1.getDate() + rangeDays - 1);
+  const start2 = end1;
+  const end2 = React.useMemo(() => new Date(start2.getTime() + rangeDays * 24 * 60 * 60 * 1000), [start2, rangeDays]);
 
-  const start2 = new Date(end1);
-  start2.setDate(start2.getDate() + 1);
-  const end2 = new Date(start2);
-  end2.setDate(end2.getDate() + rangeDays - 1);
+  const catsOn = categories && categories.length > 0;
 
-  const activeCats = new Set(categories);
+  function filterBy(binStart: Date, binEnd: Date) {
+    return (data || []).filter((it) => {
+      if (!it.detection_date) return false;
+      const dt = new Date(it.detection_date);
+      if (!inRange(dt, binStart, binEnd)) return false;
+      if (catsOn && !categories.includes(it.category)) return false;
+      return true;
+    });
+  }
 
-  const filtered = data.filter((i) => {
-    if (activeCats.size > 0 && !activeCats.has(i.category)) return false;
-    const d = parseISOorNull(i.detection_date);
-    return !!d && d >= now; // only upcoming/now
-  });
-
-  const bucket = (start: Date, end: Date, label: string): CalendarBin => {
-    const items = filtered
-      .filter((i) => {
-        const d = parseISOorNull(i.detection_date);
-        return !!d && inRange(d!, start, end);
-      })
-      .sort((a, b) => {
-        // sort inside bin: severity desc, then soonest date
-        const r = sevRank[b.severity] - sevRank[a.severity];
-        if (r !== 0) return r;
-        const ad = a.detection_date ? Date.parse(a.detection_date) : Number.POSITIVE_INFINITY;
-        const bd = b.detection_date ? Date.parse(b.detection_date) : Number.POSITIVE_INFINITY;
-        return ad - bd;
-      });
-
-    return { label, start, end, items };
+  const bin1: CalendarBin = {
+    label:
+      rangeDays === 15
+        ? "Next 15 days"
+        : rangeDays === 30
+        ? "Next 30 days"
+        : rangeDays === 60
+        ? "Next 60 days"
+        : "Next 90 days",
+    start: start1,
+    end: end1,
+    items: filterBy(start1, end1),
   };
 
-  const bin1 = bucket(start1, end1, `Next ${rangeDays} days`);
-  const bin2 = bucket(start2, end2, `Days ${rangeDays + 1}-${rangeDays * 2}`);
+  const bin2: CalendarBin = {
+    label:
+      rangeDays === 15
+        ? "Days 16–30"
+        : rangeDays === 30
+        ? "Days 31–60"
+        : rangeDays === 60
+        ? "Days 61–120"
+        : "Days 91–180",
+    start: start2,
+    end: end2,
+    items: filterBy(start2, end2),
+  };
 
-  const bins = [bin1, bin2];
+  // Optional: show exact dates under labels
+  const label1 = `${bin1.label} · ${formatRangeLabel(bin1.start, bin1.end, bin1.label)}`;
+  const label2 = `${bin2.label} · ${formatRangeLabel(bin2.start, bin2.end, bin2.label)}`;
 
   return (
-    <div className="grid gap-3 md:grid-cols-2">
-      {bins.map((bin, idx) => {
-        const urgent = bin.items.filter((i) => i.severity === "urgent").length;
-        const warn = bin.items.filter((i) => i.severity === "warn").length;
-        const opp = bin.items.filter((i) => i.severity === "opportunity").length;
+    <div className="grid gap-4 md:grid-cols-2">
+      {[bin1, bin2].map((bin, i) => (
+        <button
+          key={i}
+          onClick={() => onTileClick?.(bin)}
+          className="rounded-xl border border-white/10 bg-white/5 p-4 text-left transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-indigo-400/40"
+        >
+          <div className="mb-2 text-sm font-semibold">{i === 0 ? label1 : label2}</div>
 
-        return (
-          <button
-            key={idx}
-            onClick={() => onTileClick(bin)}
-            className="rounded-xl border border-white/10 bg-white/5 p-4 text-left hover:bg-white/10 transition"
-          >
-            <div className="mb-1 text-sm text-slate-300">{bin.label}</div>
-            <div className="text-2xl font-bold">{bin.items.length}</div>
-            <div className="mt-2 flex gap-2 text-xs">
-              <span className="badge border-white/20">urgent: {urgent}</span>
-              <span className="badge border-white/20">warn: {warn}</span>
-              <span className="badge border-white/20">opp: {opp}</span>
-            </div>
-          </button>
-        );
-      })}
+          {/* A simple stacked list of top 5 items in the bin */}
+          <div className="space-y-1">
+            {bin.items
+              .slice(0, 5)
+              .sort((a, b) => {
+                // Show most severe first (urgent > warn > opportunity > good)
+                return (
+                  SEV_ORDER.indexOf(b.severity) - SEV_ORDER.indexOf(a.severity)
+                );
+              })
+              .map((it, idx) => (
+                <div
+                  key={`${it.household_id || "HH"}-${it.id}-${idx}`}
+                  className="flex items-center justify-between rounded bg-white/5 p-2"
+                >
+                  <div className="text-xs">
+                    <div className="font-medium">#{it.id} {it.title}</div>
+                    <div className="opacity-70">
+                      HH: {it.household_id || "—"} • {it.category}
+                    </div>
+                  </div>
+                  <span className={`badge ${badgeClass(it.severity)}`}>{it.severity}</span>
+                </div>
+              ))}
+
+            {bin.items.length === 0 && (
+              <div className="text-xs text-slate-400">No insights in this window.</div>
+            )}
+          </div>
+
+          <div className="mt-3">
+            <BinSummary items={bin.items} />
+          </div>
+        </button>
+      ))}
     </div>
   );
 }
