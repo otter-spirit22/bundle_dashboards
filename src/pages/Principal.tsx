@@ -6,7 +6,6 @@ import Bullet from "../components/Bullet";
 import Spark from "../components/Spark";
 import InsightCard from "../components/InsightCard";
 
-// Compact, 2-tile calendar
 import InsightsHeatmapCompact, {
   CalendarBin,
   InsightCategory,
@@ -15,8 +14,6 @@ import InsightsHeatmapCompact, {
 
 import { bands } from "../config/benchmarks";
 import { mockMetrics, mockInsights } from "../data/mock";
-
-// If you created the simple app store:
 import { getMetrics, getInsights } from "../stores";
 
 // ---------------- Helpers & hooks ----------------
@@ -24,9 +21,7 @@ import { getMetrics, getInsights } from "../stores";
 function useMetrics() {
   return getMetrics?.() || mockMetrics;
 }
-
 function useInsights(): HeatmapInsight[] {
-  // Prefer store. If empty, return an empty array (compact heatmap tolerates it)
   const fromStore = (getInsights?.() || []) as HeatmapInsight[];
   return Array.isArray(fromStore) ? fromStore : [];
 }
@@ -51,24 +46,20 @@ export default function Principal() {
   const m = useMetrics();
   const insights = useInsights();
 
-  // 15/30/60/90 control
+  // 15/30/60/90 toggle
   const [rangeDays, setRangeDays] = React.useState<15 | 30 | 60 | 90>(30);
 
-  // Category filter (multi-select). Empty = all
+  // Category filter (empty = all)
   const [catFilter, setCatFilter] = React.useState<InsightCategory[]>([]);
 
-  // Modal for a clicked calendar bin
+  // Modal on tile click
   const [open, setOpen] = React.useState(false);
   const [selectedBin, setSelectedBin] = React.useState<CalendarBin | null>(null);
 
-  // Category toggle handler
-  function toggleCategory(cat: InsightCategory) {
-    setCatFilter((prev) =>
-      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
-    );
-  }
+  const toggleCategory = (cat: InsightCategory) =>
+    setCatFilter((prev) => (prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]));
 
-  // Build top 10 lists (most urgent upcoming)
+  // Top 10 lists (upcoming only, highest urgency first, then soonest)
   const now = Date.now();
   const upcoming = insights.filter((i) => {
     const t = i.detection_date ? Date.parse(i.detection_date) : NaN;
@@ -78,11 +69,10 @@ export default function Principal() {
   const growthTop = upcoming
     .filter((i) => i.category === "Growth Opportunities")
     .sort((a, b) => {
-      // urgency, then soonest
-      const r = SEV_RANK[b.severity] - SEV_RANK[a.severity];
-      if (r !== 0) return r;
-      const ad = a.detection_date ? Date.parse(a.detection_date) : Number.POSITIVE_INFINITY;
-      const bd = b.detection_date ? Date.parse(b.detection_date) : Number.POSITIVE_INFINITY;
+      const sev = SEV_RANK[b.severity] - SEV_RANK[a.severity];
+      if (sev) return sev;
+      const ad = a.detection_date ? Date.parse(a.detection_date) : Infinity;
+      const bd = b.detection_date ? Date.parse(b.detection_date) : Infinity;
       return ad - bd;
     })
     .slice(0, 10);
@@ -90,10 +80,10 @@ export default function Principal() {
   const retentionTop = upcoming
     .filter((i) => i.category === "Retention Radar")
     .sort((a, b) => {
-      const r = SEV_RANK[b.severity] - SEV_RANK[a.severity];
-      if (r !== 0) return r;
-      const ad = a.detection_date ? Date.parse(a.detection_date) : Number.POSITIVE_INFINITY;
-      const bd = b.detection_date ? Date.parse(b.detection_date) : Number.POSITIVE_INFINITY;
+      const sev = SEV_RANK[b.severity] - SEV_RANK[a.severity];
+      if (sev) return sev;
+      const ad = a.detection_date ? Date.parse(a.detection_date) : Infinity;
+      const bd = b.detection_date ? Date.parse(b.detection_date) : Infinity;
       return ad - bd;
     })
     .slice(0, 10);
@@ -142,7 +132,6 @@ export default function Principal() {
         <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <h2 className="font-bold">Upcoming Insights</h2>
 
-          {/* Controls: range + category filter */}
           <div className="flex flex-wrap items-center gap-2">
             {/* Range */}
             <div className="flex items-center gap-1">
@@ -150,9 +139,7 @@ export default function Principal() {
               {[15, 30, 60, 90].map((d) => (
                 <button
                   key={d}
-                  className={`badge border-white/20 ${
-                    rangeDays === d ? "bg-white/20" : ""
-                  }`}
+                  className={`badge border-white/20 ${rangeDays === d ? "bg-white/20" : ""}`}
                   onClick={() => setRangeDays(d as 15 | 30 | 60 | 90)}
                 >
                   {d}d
@@ -175,11 +162,7 @@ export default function Principal() {
                   </button>
                 );
               })}
-              {/* Clear */}
-              <button
-                className="badge border-white/20"
-                onClick={() => setCatFilter([])}
-              >
+              <button className="badge border-white/20" onClick={() => setCatFilter([])}>
                 Clear
               </button>
             </div>
@@ -264,9 +247,7 @@ export default function Principal() {
                 </a>
               </li>
             ))}
-            {growthTop.length === 0 && (
-              <li className="text-xs text-slate-400">No upcoming growth items.</li>
-            )}
+            {growthTop.length === 0 && <li className="text-xs text-slate-400">No upcoming growth items.</li>}
           </ul>
         </div>
 
@@ -293,14 +274,12 @@ export default function Principal() {
                 </a>
               </li>
             ))}
-            {retentionTop.length === 0 && (
-              <li className="text-xs text-slate-400">No upcoming retention items.</li>
-            )}
+            {retentionTop.length === 0 && <li className="text-xs text-slate-400">No upcoming retention items.</li>}
           </ul>
         </div>
       </div>
 
-      {/* Example “suggested actions” using your existing mock cards */}
+      {/* Your existing suggestion cards */}
       <div className="grid gap-4 md:grid-cols-3">
         {mockInsights.slice(0, 3).map((ins) => (
           <InsightCard
