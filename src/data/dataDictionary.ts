@@ -195,16 +195,6 @@ export const INSIGHTS_50: Insight[] = [
     title: "Refrigerated Products Coverage Gap",
     definition: "HH lacks food spoilage coverage.",
     flagLogic: "refrigerated_products_flag=0 OR refrigerated_products_limit=0",
-    metric: "count of households",
-    fields: ["refrigerated_products_flag", "refrigerated_products_limit"],
-    category: "Coverage & Endorsements",
-  },
-  {
-    id: 10,
-    key: "refrigerated_products_gap",
-    title: "Refrigerated Products Coverage Gap",
-    definition: "HH lacks food spoilage coverage.",
-    flagLogic: "refrigerated_products_flag=0 OR refrigerated_products_limit=0",
     metric: "count of HH",
     fields: ["refrigerated_products_flag", "refrigerated_products_limit"],
     category: "Coverage & Endorsements",
@@ -731,4 +721,3 @@ export function filterInsights(
     return byCategory && byTags && byQuery;
   });
 }
-];
