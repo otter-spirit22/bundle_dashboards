@@ -12,7 +12,10 @@ export default function App() {
         <nav className="flex gap-2">
           <Link className="badge border-white/20" to="/insights-50">
             50 Insights
-            </Link>
+          </Link>
+          <Link className="badge border-white/20" to="/data-dictionary">
+            Data Dictionary
+          </Link>
           <Link className="badge border-white/20" to="/principal">
             Principal
           </Link>
