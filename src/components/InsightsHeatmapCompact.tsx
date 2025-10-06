@@ -1,3 +1,4 @@
+// src/components/InsightsHeatmapCompact.tsx
 import React from "react";
 
 export type InsightCategory =
@@ -10,167 +11,126 @@ export type HeatmapInsight = {
   id: number; // 1..50
   title: string;
   household_id?: string;
-  detection_date?: string; // ISO date
+  detection_date?: string; // ISO
   category: InsightCategory;
   severity: "good" | "opportunity" | "warn" | "urgent";
 };
 
 type Bin = {
-  label: string;      // e.g., "Next 0–15d"
-  start: Date;        // window start
-  end: Date;          // window end (exclusive)
+  label: string;
+  startDay: number; // inclusive, offset from now
+  endDay: number;   // inclusive, offset from now
   items: HeatmapInsight[];
-  counts: Record<HeatmapInsight["severity"], number>;
 };
 
 export type InsightsHeatmapCompactProps = {
   data: HeatmapInsight[];
   /** 15 | 30 | 60 | 90 */
-  windowDays: 15 | 30 | 60 | 90;
-  /** show exactly two cards (first half, second half of window) */
-  twoCardsOnly?: boolean;
-  /** optional category filter */
-  categories?: InsightCategory[];
-  /** click anywhere on a card (bin) */
-  onWindowClick?: (bin: Bin) => void;
-  /** click an individual insight; if omitted we render default <a> to /household/:id */
-  onItemClick?: (insight: HeatmapInsight) => void;
+  rangeDays: 15 | 30 | 60 | 90;
+  /** empty = all */
+  categories: InsightCategory[];
+  onTileClick?: (bin: Bin) => void;
 };
 
-function inRange(d: Date, start: Date, end: Date) {
-  return d >= start && d < end;
+function daysFromNow(iso?: string): number {
+  if (!iso) return 99999;
+  const d = new Date(iso);
+  const now = new Date();
+  // normalize to midnight to make ranges stable
+  const ms = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) -
+             Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.floor(ms / (1000 * 60 * 60 * 24));
 }
 
 export default function InsightsHeatmapCompact({
   data,
-  windowDays,
-  twoCardsOnly = true,
+  rangeDays,
   categories,
-  onWindowClick,
-  onItemClick,
+  onTileClick,
 }: InsightsHeatmapCompactProps) {
-  // filter by category
-  const filtered = React.useMemo(
-    () => (categories?.length ? data.filter((d) => categories.includes(d.category)) : data),
-    [data, categories]
-  );
+  // Filter by range and category
+  const half = Math.ceil(rangeDays / 2);
+  const catSet = new Set(categories);
 
-  const now = React.useMemo(() => new Date(), []);
-  const end = React.useMemo(() => {
-    const e = new Date(now);
-    e.setDate(e.getDate() + windowDays);
-    return e;
-  }, [now, windowDays]);
+  const inRange = data.filter((it) => {
+    const df = daysFromNow(it.detection_date);
+    const catOK = categories.length === 0 || catSet.has(it.category);
+    return df >= 0 && df <= rangeDays && catOK;
+  });
 
-  // Build two bins: first half and second half of the window
-  const half = Math.floor(windowDays / 2);
-  const firstStart = now;
-  const firstEnd = new Date(now); firstEnd.setDate(firstEnd.getDate() + half);
-  const secondStart = firstEnd;
-  const secondEnd = end;
-
-  const mkBin = (label: string, s: Date, e: Date): Bin => {
-    const items = filtered.filter((it) => {
-      if (!it.detection_date) return false;
-      const d = new Date(it.detection_date);
-      return inRange(d, s, e);
-    });
-    const counts: Bin["counts"] = { good: 0, opportunity: 0, warn: 0, urgent: 0 };
-    items.forEach((i) => (counts[i.severity] = (counts[i.severity] || 0) + 1));
-    return { label, start: s, end: e, items, counts };
+  // Two bins max: first half & second half
+  const binA: Bin = {
+    label: rangeDays === 15
+      ? "Next 1–8 days"
+      : `Next 1–${half} days`,
+    startDay: 0,
+    endDay: half - 1,
+    items: [],
+  };
+  const binB: Bin = {
+    label: rangeDays === 15
+      ? "Days 9–15"
+      : `Days ${half + 1}–${rangeDays}`,
+    startDay: half,
+    endDay: rangeDays,
+    items: [],
   };
 
-  const bins: Bin[] = [
-    mkBin(`Next 0–${half}d`, firstStart, firstEnd),
-    mkBin(`Next ${half}–${windowDays}d`, secondStart, secondEnd),
-  ];
+  inRange.forEach((it) => {
+    const df = daysFromNow(it.detection_date);
+    if (df <= binA.endDay) binA.items.push(it);
+    else binB.items.push(it);
+  });
 
-  const Pill: React.FC<{ c: HeatmapInsight["severity"]; n: number }> = ({ c, n }) => (
-    <span className="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-0.5 text-xs">
-      <span
-        className={`h-2 w-2 rounded-full ${
-          c === "urgent" ? "bg-red-400"
-          : c === "warn" ? "bg-yellow-400"
-          : c === "opportunity" ? "bg-indigo-400"
-          : "bg-emerald-400"
-        }`}
-      />
-      {n}
-    </span>
-  );
-
-  const openItem = (it: HeatmapInsight) => {
-    if (onItemClick) return onItemClick(it);
-    // default navigation
-    const hh = encodeURIComponent(it.household_id || "");
-    window.location.href = `/household/${hh}?insight=${it.id}`;
-  };
+  const bins = [binA, binB];
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-3 md:grid-cols-2">
       {bins.map((bin, idx) => (
-        <div
-          key={idx}
-          role="button"
-          tabIndex={0}
-          onClick={() => onWindowClick?.(bin)}
-          onKeyDown={(e) => e.key === "Enter" && onWindowClick?.(bin)}
-          className="rounded-2xl border border-white/10 bg-white/5 p-4 outline-none hover:bg-white/10 cursor-pointer"
-        >
+        <div key={idx} className="rounded-xl bg-white/5 p-3 border border-white/10">
           <div className="mb-2 flex items-center justify-between">
             <div className="font-semibold">{bin.label}</div>
-            <div className="flex gap-2">
-              <Pill c="urgent" n={bin.counts.urgent} />
-              <Pill c="warn" n={bin.counts.warn} />
-              <Pill c="opportunity" n={bin.counts.opportunity} />
-              <Pill c="good" n={bin.counts.good} />
-            </div>
+            <button
+              className="badge border-white/20"
+              onClick={() => onTileClick?.(bin)}
+            >
+              View {bin.items.length}
+            </button>
           </div>
 
-          {/* Top 6 insights list inside the card, each row clickable */}
-          <div className="space-y-1">
+          {/* Tiny list preview */}
+          <div className="space-y-2 max-h-40 overflow-auto pr-1">
             {bin.items.slice(0, 6).map((it, i) => (
-              <div
+              <a
                 key={i}
-                className="flex items-center justify-between rounded bg-white/5 px-2 py-1 hover:bg-white/10"
-                onClick={(e) => {
-                  e.stopPropagation(); // don't bubble to card click
-                  openItem(it);
-                }}
+                className="block rounded bg-white/5 px-2 py-1 text-sm hover:bg-white/10"
+                href={`/household/${encodeURIComponent(it.household_id || "")}?insight=${it.id}`}
+                title={`HH ${it.household_id || "—"}`}
               >
-                <div className="min-w-0">
-                  <div className="truncate text-sm">{it.title}</div>
-                  <div className="truncate text-xs text-slate-400">
-                    HH: {it.household_id || "—"} • {it.category}
-                  </div>
+                <div className="flex items-center justify-between">
+                  <span className="truncate">{it.title}</span>
+                  <span className={`text-xs ml-2 ${badgeClass(it.severity)}`}>
+                    {it.severity}
+                  </span>
                 </div>
-                <span
-                  className={`ml-2 h-2 w-2 flex-none rounded-full ${
-                    it.severity === "urgent"
-                      ? "bg-red-400"
-                      : it.severity === "warn"
-                      ? "bg-yellow-400"
-                      : it.severity === "opportunity"
-                      ? "bg-indigo-400"
-                      : "bg-emerald-400"
-                  }`}
-                  title={it.severity}
-                />
-              </div>
+                <div className="text-[11px] text-slate-400">
+                  {it.category} • HH {it.household_id || "—"}
+                </div>
+              </a>
             ))}
-
             {bin.items.length === 0 && (
-              <div className="text-xs text-slate-400">No insights in this window.</div>
-            )}
-
-            {bin.items.length > 6 && (
-              <div className="pt-1 text-right text-xs text-slate-400">
-                +{bin.items.length - 6} more
-              </div>
+              <div className="text-xs text-slate-400">No upcoming items.</div>
             )}
           </div>
         </div>
       ))}
     </div>
   );
+}
+
+function badgeClass(sev: HeatmapInsight["severity"]) {
+  if (sev === "urgent") return "text-red-400";
+  if (sev === "warn") return "text-amber-300";
+  if (sev === "opportunity") return "text-indigo-300";
+  return "text-emerald-300";
 }
