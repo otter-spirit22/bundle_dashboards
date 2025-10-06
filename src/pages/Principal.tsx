@@ -89,6 +89,10 @@ export default function Principal() {
   const rows = useUploadedRows();
   const heatmapData = fallbackBuildInsightsFromRows(rows);
 
+  // NEW: simple modal state for month click
+  const [open, setOpen] = React.useState(false);
+  const [selectedBin, setSelectedBin] = React.useState<any>(null);
+
   return (
     <div className="mx-auto max-w-6xl p-6 space-y-4">
       <h1 className="text-xl font-extrabold text-indigo-300">Principal Dashboard</h1>
@@ -128,16 +132,70 @@ export default function Principal() {
         <Spark label="Tenure Momentum (sim)" points={[6.4, 6.5, 6.6, 6.7, 6.8]} />
       </div>
 
-      {/* Upcoming Insights Heatmap */}
-      <InsightsHeatmap
-        data={heatmapData}
-        months={12}
-        defaultCategories={[]}
-        onMonthClick={(bin) => {
-          // Wire this to open a modal/drawer listing bin.items
-          console.log("Heatmap month clicked:", bin);
-        }}
-      />
+      {/* >>> Upcoming Insights Calendar (panel) <<< */}
+      <div className="card p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-bold">Upcoming Insights (12-month view)</h2>
+
+          {/* Optional granularity toggle */}
+          {/* Wire these to state and pass different props to InsightsHeatmap if you add weekly/quarterly modes */}
+          <div className="flex gap-2 text-xs">
+            <span className="badge border-white/20">Monthly</span>
+            {/* <button className="badge border-white/20">Weekly</button>
+            <button className="badge border-white/20">Quarterly</button> */}
+          </div>
+        </div>
+
+        <InsightsHeatmap
+          data={heatmapData}
+          months={12}
+          defaultCategories={[]}   // e.g., ["Growth Opportunities"]
+          onMonthClick={(bin) => {
+            // bin = { year, monthIndex, items:[{id,title,household_id,...}] }
+            setSelectedBin(bin);
+            setOpen(true);
+          }}
+        />
+      </div>
+
+      {/* Simple modal for clicked month */}
+      {open && (
+        <>
+          <div className="drawer-overlay" onClick={() => setOpen(false)} />
+          <div className="card fixed left-1/2 top-20 z-50 w-[90vw] max-w-2xl -translate-x-1/2 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="font-semibold">
+                {selectedBin?.label || "Selected Month"}
+              </h3>
+              <button className="badge border-white/20" onClick={() => setOpen(false)}>
+                Close
+              </button>
+            </div>
+            <div className="max-h-[60vh] overflow-auto space-y-2">
+              {(selectedBin?.items || []).map((it: any, idx: number) => (
+                <div key={idx} className="flex items-center justify-between rounded bg-white/5 p-2">
+                  <div className="text-sm">
+                    <div className="font-medium">{it.title}</div>
+                    <div className="text-xs text-slate-400">
+                      HH: {it.household_id || "—"} • Category: {it.category} • Severity: {it.severity}
+                    </div>
+                  </div>
+                  {/* Deep link to a detail page you may add later */}
+                  <a
+                    className="badge border-white/20"
+                    href={`/insights?hh=${encodeURIComponent(it.household_id || "")}&id=${it.id}`}
+                  >
+                    View
+                  </a>
+                </div>
+              ))}
+              {(!selectedBin?.items || selectedBin.items.length === 0) && (
+                <div className="text-sm text-slate-400">No insights in this month.</div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Suggested Actions / Top Insights */}
       <div className="grid gap-4 md:grid-cols-3">
