@@ -4,6 +4,20 @@ import InsightCard from "../components/InsightCard";
 import { mockMetrics, mockInsights } from "../data/mock";
 import { bands } from "../config/benchmarks";
 
+// Example data
+const opportunities = [
+  {
+    title: "Expand to New Markets",
+    description: "Target emerging markets for new revenue streams.",
+    impact: 5,
+    urgency: 4,
+    confidence: "Measured",
+  },
+  // ...add at least 10 items
+];
+// In your page/component
+<GrowthOpportunities opportunities={opportunities} />
+
 function useMetrics() {
   const anyWin = (window as any).__BB_METRICS__;
   return anyWin || mockMetrics;
@@ -56,3 +70,4 @@ export default function Producer() {
     </div>
   );
 }
+
