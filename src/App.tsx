@@ -11,6 +11,9 @@ export default function App() {
 
         <nav className="flex gap-2">
           <Link className="badge border-white/20" to="/principal">
+            Opportunities
+            </Link>
+          <Link className="badge border-white/20" to="/principal">
             Principal
           </Link>
           <Link className="badge border-white/20" to="/producer">
