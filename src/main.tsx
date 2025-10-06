@@ -9,6 +9,7 @@ import Producer from './pages/Producer';
 import AccountManager from './pages/AccountManager';
 
 // NEW PAGES
+import Insights50 from './pages/Insights50';
 import Opportunities from './pages/Opportunities';
 import About from './pages/About';
 import Pricing from './pages/Pricing';
@@ -24,7 +25,8 @@ const router = createBrowserRouter([
   { path: '/Opportunities', element: <Opportunities/> },
   { path: '/about', element: <About /> },
   { path: '/pricing', element: <Pricing /> },
-  { path: '/insights', element: <Insights /> }, // optional
+  { path: '/insights', element: <Insights /> },
+  { path: '/insights-50', element:<Insights50/> }, // optional
 ]);
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
