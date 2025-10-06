@@ -43,24 +43,19 @@ export default function HorizontalInsightCarousel({
 }: Props) {
   const trackRef = React.useRef<HTMLDivElement>(null);
 
-  // filter
   let items = Array.isArray(insights) ? [...insights] : [];
   if (categoryFilter?.length) {
     const set = new Set(categoryFilter);
     items = items.filter((i) => (i.category ? set.has(i.category) : true));
   }
 
-  // sort
   items.sort((a, b) => {
     if (mode === "impact") {
-      // null-safe, highest first
       const ai = a.impact ?? -Infinity;
       const bi = b.impact ?? -Infinity;
       if (bi !== ai) return bi - ai;
-      // tie-break by urgency rank
-      return (urgencyRank[b.urgency || "good"] - urgencyRank[a.urgency || "good"]);
+      return urgencyRank[b.urgency || "good"] - urgencyRank[a.urgency || "good"];
     } else {
-      // urgency-first, then impact
       const au = urgencyRank[a.urgency || "good"];
       const bu = urgencyRank[b.urgency || "good"];
       if (bu !== au) return bu - au;
@@ -73,8 +68,8 @@ export default function HorizontalInsightCarousel({
   const scrollByCards = (dir: "left" | "right") => {
     const el = trackRef.current;
     if (!el) return;
-    const card = el.querySelector<HTMLDivElement>("[data-card]"); // first card
-    const step = card ? card.clientWidth + 16 : 320; // include gap
+    const card = el.querySelector<HTMLDivElement>("[data-card]");
+    const step = card ? card.clientWidth + 16 : 320;
     el.scrollBy({ left: dir === "left" ? -step : step, behavior: "smooth" });
   };
 
@@ -87,36 +82,19 @@ export default function HorizontalInsightCarousel({
             Mode: <b className="text-slate-200 capitalize">{mode}</b> • Showing {items.length}
           </span>
           <div className="flex gap-1">
-            <button
-              className="badge border-white/20"
-              onClick={() => scrollByCards("left")}
-              aria-label="Scroll left"
-            >
-              ◀
-            </button>
-            <button
-              className="badge border-white/20"
-              onClick={() => scrollByCards("right")}
-              aria-label="Scroll right"
-            >
-              ▶
-            </button>
+            <button className="badge border-white/20" onClick={() => scrollByCards("left")} aria-label="Scroll left">◀</button>
+            <button className="badge border-white/20" onClick={() => scrollByCards("right")} aria-label="Scroll right">▶</button>
           </div>
         </div>
       </div>
 
-      {/* horizontal track */}
       <div
         ref={trackRef}
         className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2"
         style={{ scrollBehavior: "smooth" }}
       >
         {items.map((ins) => (
-          <div
-            key={ins.key}
-            data-card
-            className="min-w-[320px] max-w-[320px] snap-start"
-          >
+          <div key={ins.key} data-card className="min-w-[320px] max-w-[320px] snap-start">
             <InsightCard
               key={ins.key}
               title={ins.title}
