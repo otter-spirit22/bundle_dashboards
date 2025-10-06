@@ -1,94 +1,33 @@
 // src/stores.ts
+import type { HeatmapInsight } from "./data/insightsAggregator";
 
-// ---- Types ----
-export type UploadedRow = Record<string, any>;
+type Row = Record<string, any>;
 
-export type InsightCategory =
-  | "Growth Opportunities"
-  | "Retention Radar"
-  | "Service Drain"
-  | "Risk & Compliance";
+let _rows: Row[] = [];
+let _metrics: any = null;
+let _insights: HeatmapInsight[] = [];
 
-export type Severity = "good" | "opportunity" | "warn" | "urgent";
-
-export interface HeatmapInsight {
-  id: number;                 // 1..50
-  title: string;
-  household_id?: string;
-  detection_date?: string;    // ISO date
-  category: InsightCategory;
-  severity: Severity;
+export function setRows(rows: Row[]) {
+  _rows = Array.isArray(rows) ? rows : [];
 }
-
-export interface Metrics {
-  benchScore: number;
-  timeBackHoursMoTopN: number;
-  coverageDepthPct: number;
-  remarketingLoadPer100: number;
-  serviceTouchIndexMinPerHHYr: number;
-  // add other metrics fields here if you compute them
+export function setMetrics(m: any) {
+  _metrics = m ?? null;
 }
-
-// ---- Simple pub-sub state (no external deps) ----
-type Listener = () => void;
-
-const state: {
-  rows: UploadedRow[];
-  metrics: Metrics | null;
-  insights: HeatmapInsight[];
-} = {
-  rows: [],
-  metrics: null,
-  insights: [],
-};
-
-const listeners = new Set<Listener>();
-
-function emit() {
-  listeners.forEach((fn) => {
-    try {
-      fn();
-    } catch {
-      // ignore listener errors
-    }
-  });
+export function setInsights(i: HeatmapInsight[]) {
+  _insights = Array.isArray(i) ? i : [];
 }
-
-// ---- Getters ----
-export function getRows(): UploadedRow[] {
-  return state.rows;
+export function getRows(): Row[] {
+  return _rows;
 }
-export function getMetrics(): Metrics | null {
-  return state.metrics;
+export function getMetrics(): any {
+  return _metrics;
 }
 export function getInsights(): HeatmapInsight[] {
-  return state.insights;
-}
-export function getState() {
-  return state;
+  return _insights;
 }
 
-// ---- Setters (also mirror to window for legacy access) ----
-export function setRows(rows: UploadedRow[]) {
-  state.rows = Array.isArray(rows) ? rows : [];
-  (window as any).__BB_ROWS__ = state.rows;
-  emit();
-}
-
-export function setMetrics(metrics: Metrics) {
-  state.metrics = metrics;
-  (window as any).__BB_METRICS__ = state.metrics;
-  emit();
-}
-
-export function setInsights(items: HeatmapInsight[]) {
-  state.insights = Array.isArray(items) ? items : [];
-  (window as any).__BB_INSIGHTS__ = state.insights;
-  emit();
-}
-
-// ---- Subscribe / Unsubscribe ----
-export function subscribe(fn: Listener): () => void {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
+export function setData(payload: { rows?: Row[]; metrics?: any; insights?: HeatmapInsight[] }) {
+  if (payload.rows) setRows(payload.rows);
+  if (payload.metrics) setMetrics(payload.metrics);
+  if (payload.insights) setInsights(payload.insights);
 }
