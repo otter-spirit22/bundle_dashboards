@@ -9,9 +9,7 @@ export default function App() {
         <h1 className="text-xl font-extrabold uppercase text-indigo-300">Bundle Bench</h1>
 
         <div className="flex items-center gap-2">
-          {/* New navigation (dropdown + selector) */}
           <NavMenu />
-          {/* Existing uploader */}
           <UploadDrawer />
         </div>
       </header>
@@ -28,20 +26,13 @@ export default function App() {
         <div className="card">
           <h2 className="mb-2 font-bold">Next steps</h2>
           <ol className="ml-5 list-decimal space-y-1">
-            <li>
-              Wire real importer in <code>src/data/loader.ts</code>
-            </li>
-            <li>
-              Replace mocks with computes in <code>src/data/metrics.ts</code>
-            </li>
-            <li>
-              Adjust benchmarks in <code>src/config/benchmarks.ts</code>
-            </li>
+            <li>Wire real importer in <code>src/data/loader.ts</code></li>
+            <li>Replace mocks with computes in <code>src/data/metrics.ts</code></li>
+            <li>Adjust benchmarks in <code>src/config/benchmarks.ts</code></li>
           </ol>
         </div>
       </div>
 
-      {/* Quick links section */}
       <div className="mt-6 grid gap-3 sm:grid-cols-2 md:grid-cols-3">
         <Link to="/principal" className="card hover:bg-white/5">
           <div className="font-semibold">Principal</div>
@@ -74,6 +65,11 @@ export default function App() {
         <Link to="/about" className="card hover:bg-white/5">
           <div className="font-semibold">About</div>
           <div className="text-sm text-slate-400">What is Bundle Bench?</div>
+        </Link>
+        {/* Optional deep-link used by other pages */}
+        <Link to="/household" className="card hover:bg-white/5">
+          <div className="font-semibold">Household</div>
+          <div className="text-sm text-slate-400">Detail view (linked from insights)</div>
         </Link>
       </div>
     </div>
