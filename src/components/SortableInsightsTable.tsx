@@ -1,30 +1,28 @@
 import React from "react";
 
-/** Categories used across the app (keep in sync with your dictionary) */
 export type Category =
   | "Growth Opportunities"
   | "Retention Radar"
   | "Service Drain"
   | "Risk & Compliance";
 
-/** One row in the Data Dictionary */
 export type DictionaryItem = {
-  id: number;                    // 1..50 (or meta metrics)
-  key: string;                   // stable key, e.g. "bundling_gap"
-  title: string;                 // display name
-  definition: string;            // what it means
-  flagLogic: string;             // how it’s computed (human readable)
-  metric: string;                // primary field or formula label
-  fields: string[];              // required columns
-  tags?: string[];               // optional labels
-  category: Category;            // bucket
-  benchmarkNote?: string;        // any benchmark/tuning notes
+  id: number;
+  key: string;
+  title: string;
+  definition: string;
+  flagLogic: string;
+  metric: string;
+  fields: string[];
+  tags?: string[];
+  category: Category;
+  benchmarkNote?: string;
 };
 
 type Props = {
-  items: DictionaryItem[];
+  /** Now optional so accidental empty usage won't fail the build */
+  items?: DictionaryItem[];
   className?: string;
-  /** Optional row click if you want to deep-link */
   onRowClick?: (item: DictionaryItem) => void;
 };
 
@@ -38,7 +36,7 @@ type SortKey =
   | "flagLogic";
 
 export default function SortableInsightsTable({
-  items,
+  items = [],               // default prevents the TS error
   className = "",
   onRowClick,
 }: Props) {
@@ -126,7 +124,6 @@ export default function SortableInsightsTable({
 
   return (
     <div className={className}>
-      {/* Search */}
       <div className="mb-3 flex items-center gap-2">
         <input
           value={query}
@@ -146,7 +143,6 @@ export default function SortableInsightsTable({
         </button>
       </div>
 
-      {/* Table */}
       <div className="overflow-auto rounded-lg border border-white/10">
         <table className="w-full border-collapse text-sm">
           <thead className="bg-white/5">
@@ -169,67 +165,62 @@ export default function SortableInsightsTable({
             </tr>
           </thead>
           <tbody>
-            {filtered.map((it) => {
-              const Row = (
-                <tr
-                  key={`${it.id}-${it.key}`}
-                  className="hover:bg-white/5"
-                  onClick={
-                    onRowClick ? () => onRowClick(it) : undefined
-                  }
-                >
-                  <td className="px-3 py-2 align-top tabular-nums text-xs opacity-80">
-                    {it.id}
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    <div className="font-medium">{it.title}</div>
-                    <div className="text-[11px] opacity-70">{it.key}</div>
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    <span className="badge border-white/20">{it.category}</span>
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    <code className="rounded bg-white/10 px-1 py-0.5 text-[11px]">
-                      {it.metric}
-                    </code>
-                  </td>
-                  <td className="px-3 py-2 align-top text-slate-200">
-                    {it.definition}
-                  </td>
-                  <td className="px-3 py-2 align-top text-slate-300">
-                    <span className="text-[11px]">{it.flagLogic}</span>
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    <div className="flex flex-wrap gap-1">
-                      {it.fields.map((f) => (
-                        <span
-                          key={f}
-                          className="rounded bg-white/10 px-1 py-0.5 text-[11px]"
-                        >
-                          {f}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    <div className="flex flex-wrap gap-1">
-                      {(it.tags || []).map((t) => (
-                        <span
-                          key={t}
-                          className="rounded bg-indigo-500/20 px-1 py-0.5 text-[11px] text-indigo-200"
-                        >
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 align-top text-[11px] text-slate-400">
-                    {it.benchmarkNote || "—"}
-                  </td>
-                </tr>
-              );
-              return Row;
-            })}
+            {filtered.map((it) => (
+              <tr
+                key={`${it.id}-${it.key}`}
+                className="hover:bg-white/5"
+                onClick={onRowClick ? () => onRowClick(it) : undefined}
+              >
+                <td className="px-3 py-2 align-top tabular-nums text-xs opacity-80">
+                  {it.id}
+                </td>
+                <td className="px-3 py-2 align-top">
+                  <div className="font-medium">{it.title}</div>
+                  <div className="text-[11px] opacity-70">{it.key}</div>
+                </td>
+                <td className="px-3 py-2 align-top">
+                  <span className="badge border-white/20">{it.category}</span>
+                </td>
+                <td className="px-3 py-2 align-top">
+                  <code className="rounded bg-white/10 px-1 py-0.5 text-[11px]">
+                    {it.metric}
+                  </code>
+                </td>
+                <td className="px-3 py-2 align-top text-slate-200">
+                  {it.definition}
+                </td>
+                <td className="px-3 py-2 align-top text-slate-300">
+                  <span className="text-[11px]">{it.flagLogic}</span>
+                </td>
+                <td className="px-3 py-2 align-top">
+                  <div className="flex flex-wrap gap-1">
+                    {it.fields.map((f) => (
+                      <span
+                        key={f}
+                        className="rounded bg-white/10 px-1 py-0.5 text-[11px]"
+                      >
+                        {f}
+                      </span>
+                    ))}
+                  </div>
+                </td>
+                <td className="px-3 py-2 align-top">
+                  <div className="flex flex-wrap gap-1">
+                    {(it.tags || []).map((t) => (
+                      <span
+                        key={t}
+                        className="rounded bg-indigo-500/20 px-1 py-0.5 text-[11px] text-indigo-200"
+                      >
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                </td>
+                <td className="px-3 py-2 align-top text-[11px] text-slate-400">
+                  {it.benchmarkNote || "—"}
+                </td>
+              </tr>
+            ))}
             {filtered.length === 0 && (
               <tr>
                 <td className="px-3 py-6 text-center text-slate-400" colSpan={9}>
