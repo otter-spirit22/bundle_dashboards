@@ -1,58 +1,43 @@
-import Papa, { ParseResult } from "papaparse";
-import * as XLSX from "xlsx";
+// src/data/loader.ts
+import Papa from "papaparse";
+import type { CanonicalRow } from "./schema";
+import { buildHeaderMap, normalizeRow, missingRequiredFields } from "./schema";
 
-export type Household = Record<string, any>;
+/**
+ * Parse a File (CSV) into CanonicalRow[].
+ * (If you need XLSX too, add SheetJS and branch on file.type.)
+ */
+export async function parseFile(file: File): Promise<{ rows: CanonicalRow[]; meta: any }> {
+  const text = await file.text();
 
-const headerMap: Record<string, string> = {
-  hh_id: "household_id",
-  id: "household_id",
-  tenure: "tenure_years",
-  lines: "lines_count",
-  bundled: "bundled_flag",
-  umbrella: "umbrella_flag",
-  remarkets: "remarkets_12m",
-  aht: "avg_minutes_per_touch",
-  minutes_per_touch: "avg_minutes_per_touch",
-  minutes_per_remarket: "est_minutes_per_remarket",
-};
-
-function normalizeHeader(h: string) {
-  const key = h.trim().toLowerCase().replace(/\s+/g, "_");
-  return headerMap[key] || key;
-}
-
-export async function parseFile(file: File): Promise<Household[]> {
-  const name = file.name.toLowerCase();
-  if (name.endsWith(".csv")) return parseCSV(file);
-  if (name.endsWith(".xlsx") || name.endsWith(".xls")) return parseXLSX(file);
-  throw new Error("Unsupported file type. Please upload CSV or XLSX.");
-}
-
-async function parseCSV(file: File): Promise<Household[]> {
-  return new Promise((resolve, reject) => {
-    Papa.parse<Household>(file, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: normalizeHeader,
-      complete: (results: ParseResult<Household>) => resolve(results.data),
-      error: (err: unknown) =>
-        reject(err instanceof Error ? err : new Error(String(err))),
-    });
+  const parsed = Papa.parse<Record<string, any>>(text, {
+    header: true,
+    skipEmptyLines: true,
+    dynamicTyping: false,
   });
-}
 
-async function parseXLSX(file: File): Promise<Household[]> {
-  const data = await file.arrayBuffer();
-  const wb = XLSX.read(data, { type: "array" });
-  const first = wb.SheetNames[0];
-  const ws = wb.Sheets[first];
-  const raw = XLSX.utils.sheet_to_json(ws, { defval: "", header: 1 }) as any[][];
-  if (raw.length === 0) return [];
-  const headers = (raw[0] as string[]).map(normalizeHeader);
-  const rows = raw.slice(1).map((r) => {
-    const obj: Record<string, any> = {};
-    headers.forEach((h, i) => (obj[h] = r[i]));
-    return obj;
-  });
-  return rows as Household[];
+  if (parsed.errors?.length) {
+    const first = parsed.errors[0];
+    throw new Error(`CSV parse error at row ${first.row}: ${first.message}`);
+  }
+
+  const headers = parsed.meta.fields || [];
+  const headerMap = buildHeaderMap(headers);
+  const missing = missingRequiredFields(headers);
+
+  const rows = (parsed.data || [])
+    .map((raw) => normalizeRow(raw, headerMap))
+    // keep rows with at least a household_id
+    .filter((r) => r.household_id && r.household_id.length > 0);
+
+  const meta = {
+    totalRaw: parsed.data?.length || 0,
+    totalKept: rows.length,
+    headers,
+    headerMap,
+    missingRequired: missing,
+    unmappedHeaders: headers.filter((h) => !(h in headerMap)),
+  };
+
+  return { rows, meta };
 }
