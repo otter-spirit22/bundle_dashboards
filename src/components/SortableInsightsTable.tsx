@@ -1,58 +1,245 @@
-import React, { useState } from 'react';
-import { Insight, INSIGHTS_50 } from '../data/dataDictionary';
-import InsightCard from './InsightCard';
+import React from "react";
 
-type SortKey = keyof Pick<Insight, 'title' | 'category' | 'metric'>;
+/** Categories used across the app (keep in sync with your dictionary) */
+export type Category =
+  | "Growth Opportunities"
+  | "Retention Radar"
+  | "Service Drain"
+  | "Risk & Compliance";
 
-const SortableInsightsTable: React.FC = () => {
-  const [sortBy, setSortBy] = useState<SortKey>('title');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-
-  const sortedInsights = [...INSIGHTS_50].sort((a, b) => {
-    const valA = a[sortBy].toString().toLowerCase();
-    const valB = b[sortBy].toString().toLowerCase();
-    if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
-    if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
-    return 0;
-  });
-
-  const toggleSort = (key: SortKey) => {
-    if (key === sortBy) {
-      setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
-    } else {
-      setSortBy(key);
-      setSortDirection('asc');
-    }
-  };
-
-  return (
-    <div className="p-4">
-      <table className="w-full table-auto border border-gray-300">
-        <thead>
-          <tr className="bg-gray-100 text-left">
-            <th className="px-4 py-2 cursor-pointer" onClick={() => toggleSort('title')}>
-              Title {sortBy === 'title' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-            </th>
-            <th className="px-4 py-2 cursor-pointer" onClick={() => toggleSort('category')}>
-              Category {sortBy === 'category' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-            </th>
-            <th className="px-4 py-2 cursor-pointer" onClick={() => toggleSort('metric')}>
-              Metric {sortBy === 'metric' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {sortedInsights.map(insight => (
-            <tr key={insight.id} className="border-t border-gray-200">
-              <td colSpan={3}>
-                <InsightCard {...insight} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+/** One row in the Data Dictionary */
+export type DictionaryItem = {
+  id: number;                    // 1..50 (or meta metrics)
+  key: string;                   // stable key, e.g. "bundling_gap"
+  title: string;                 // display name
+  definition: string;            // what it means
+  flagLogic: string;             // how it’s computed (human readable)
+  metric: string;                // primary field or formula label
+  fields: string[];              // required columns
+  tags?: string[];               // optional labels
+  category: Category;            // bucket
+  benchmarkNote?: string;        // any benchmark/tuning notes
 };
 
-export default SortableInsightsTable;
+type Props = {
+  items: DictionaryItem[];
+  className?: string;
+  /** Optional row click if you want to deep-link */
+  onRowClick?: (item: DictionaryItem) => void;
+};
+
+type SortKey =
+  | "id"
+  | "key"
+  | "title"
+  | "category"
+  | "metric"
+  | "definition"
+  | "flagLogic";
+
+export default function SortableInsightsTable({
+  items,
+  className = "",
+  onRowClick,
+}: Props) {
+  const [sortKey, setSortKey] = React.useState<SortKey>("id");
+  const [asc, setAsc] = React.useState<boolean>(true);
+  const [query, setQuery] = React.useState("");
+
+  const onSort = (k: SortKey) => {
+    setSortKey((prev) => {
+      if (prev === k) {
+        setAsc((a) => !a);
+        return prev;
+      }
+      setAsc(true);
+      return k;
+    });
+  };
+
+  const filtered = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const base = q
+      ? items.filter((it) =>
+          [
+            it.title,
+            it.key,
+            it.category,
+            it.definition,
+            it.metric,
+            it.flagLogic,
+            ...(it.tags || []),
+            ...it.fields,
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(q)
+        )
+      : items.slice();
+
+    const sorted = base.sort((a, b) => {
+      const dir = asc ? 1 : -1;
+      switch (sortKey) {
+        case "id":
+          return (a.id - b.id) * dir;
+        case "key":
+          return a.key.localeCompare(b.key) * dir;
+        case "title":
+          return a.title.localeCompare(b.title) * dir;
+        case "category":
+          return a.category.localeCompare(b.category) * dir;
+        case "metric":
+          return a.metric.localeCompare(b.metric) * dir;
+        case "definition":
+          return a.definition.localeCompare(b.definition) * dir;
+        case "flagLogic":
+          return a.flagLogic.localeCompare(b.flagLogic) * dir;
+        default:
+          return 0;
+      }
+    });
+
+    return sorted;
+  }, [items, query, sortKey, asc]);
+
+  const Th = ({
+    k,
+    label,
+    width,
+  }: {
+    k: SortKey;
+    label: string;
+    width?: string;
+  }) => (
+    <th
+      className="cursor-pointer select-none whitespace-nowrap px-3 py-2 text-left text-sm font-semibold"
+      style={width ? { width } : undefined}
+      onClick={() => onSort(k)}
+      title="Click to sort"
+    >
+      {label}
+      {sortKey === k && (
+        <span className="ml-1 opacity-70">{asc ? "▲" : "▼"}</span>
+      )}
+    </th>
+  );
+
+  return (
+    <div className={className}>
+      {/* Search */}
+      <div className="mb-3 flex items-center gap-2">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search title, logic, fields, tags…"
+          className="w-full rounded border border-white/10 bg-white/5 px-3 py-2 text-sm"
+        />
+        <button
+          className="badge border-white/20"
+          onClick={() => {
+            setQuery("");
+            setSortKey("id");
+            setAsc(true);
+          }}
+        >
+          Reset
+        </button>
+      </div>
+
+      {/* Table */}
+      <div className="overflow-auto rounded-lg border border-white/10">
+        <table className="w-full border-collapse text-sm">
+          <thead className="bg-white/5">
+            <tr>
+              <Th k="id" label="ID" width="64px" />
+              <Th k="title" label="Title" />
+              <Th k="category" label="Category" width="180px" />
+              <Th k="metric" label="Metric / Field" width="200px" />
+              <Th k="definition" label="Definition" />
+              <Th k="flagLogic" label="Logic" />
+              <th className="px-3 py-2 text-left text-sm font-semibold whitespace-nowrap">
+                Fields
+              </th>
+              <th className="px-3 py-2 text-left text-sm font-semibold whitespace-nowrap">
+                Tags
+              </th>
+              <th className="px-3 py-2 text-left text-sm font-semibold whitespace-nowrap">
+                Benchmark
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((it) => {
+              const Row = (
+                <tr
+                  key={`${it.id}-${it.key}`}
+                  className="hover:bg-white/5"
+                  onClick={
+                    onRowClick ? () => onRowClick(it) : undefined
+                  }
+                >
+                  <td className="px-3 py-2 align-top tabular-nums text-xs opacity-80">
+                    {it.id}
+                  </td>
+                  <td className="px-3 py-2 align-top">
+                    <div className="font-medium">{it.title}</div>
+                    <div className="text-[11px] opacity-70">{it.key}</div>
+                  </td>
+                  <td className="px-3 py-2 align-top">
+                    <span className="badge border-white/20">{it.category}</span>
+                  </td>
+                  <td className="px-3 py-2 align-top">
+                    <code className="rounded bg-white/10 px-1 py-0.5 text-[11px]">
+                      {it.metric}
+                    </code>
+                  </td>
+                  <td className="px-3 py-2 align-top text-slate-200">
+                    {it.definition}
+                  </td>
+                  <td className="px-3 py-2 align-top text-slate-300">
+                    <span className="text-[11px]">{it.flagLogic}</span>
+                  </td>
+                  <td className="px-3 py-2 align-top">
+                    <div className="flex flex-wrap gap-1">
+                      {it.fields.map((f) => (
+                        <span
+                          key={f}
+                          className="rounded bg-white/10 px-1 py-0.5 text-[11px]"
+                        >
+                          {f}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 align-top">
+                    <div className="flex flex-wrap gap-1">
+                      {(it.tags || []).map((t) => (
+                        <span
+                          key={t}
+                          className="rounded bg-indigo-500/20 px-1 py-0.5 text-[11px] text-indigo-200"
+                        >
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 align-top text-[11px] text-slate-400">
+                    {it.benchmarkNote || "—"}
+                  </td>
+                </tr>
+              );
+              return Row;
+            })}
+            {filtered.length === 0 && (
+              <tr>
+                <td className="px-3 py-6 text-center text-slate-400" colSpan={9}>
+                  No matching entries.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
