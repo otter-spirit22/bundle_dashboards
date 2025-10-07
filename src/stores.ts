@@ -1,33 +1,43 @@
 // src/stores.ts
-import type { HeatmapInsight } from "./data/insightsAggregator";
+export type UploadedRow = Record<string, any>;
 
-type Row = Record<string, any>;
+export type InsightCategory =
+  | "Growth Opportunities"
+  | "Retention Radar"
+  | "Service Drain"
+  | "Risk & Compliance";
 
-let _rows: Row[] = [];
-let _metrics: any = null;
-let _insights: HeatmapInsight[] = [];
+export type HeatmapInsight = {
+  id: number;                // 1..50
+  title: string;
+  household_id?: string;
+  detection_date?: string;   // ISO date
+  category: InsightCategory;
+  severity: "good" | "opportunity" | "warn" | "urgent";
+  impact?: number;           // optional score (0-100)
+  urgency?: number;          // optional score (0-100)
+};
 
-export function setRows(rows: Row[]) {
-  _rows = Array.isArray(rows) ? rows : [];
+// ---- Lightweight in-memory store via window shims (no duplicate globals) ----
+const w = window as any;
+
+export function setRows(rows: UploadedRow[]) {
+  w.__BB_ROWS__ = rows;
 }
-export function setMetrics(m: any) {
-  _metrics = m ?? null;
+export function getRows(): UploadedRow[] {
+  return Array.isArray(w.__BB_ROWS__) ? w.__BB_ROWS__ : [];
 }
-export function setInsights(i: HeatmapInsight[]) {
-  _insights = Array.isArray(i) ? i : [];
-}
-export function getRows(): Row[] {
-  return _rows;
-}
-export function getMetrics(): any {
-  return _metrics;
+
+export function setInsights(ins: HeatmapInsight[]) {
+  w.__BB_INSIGHTS__ = ins;
 }
 export function getInsights(): HeatmapInsight[] {
-  return _insights;
+  return Array.isArray(w.__BB_INSIGHTS__) ? w.__BB_INSIGHTS__ : [];
 }
 
-export function setData(payload: { rows?: Row[]; metrics?: any; insights?: HeatmapInsight[] }) {
-  if (payload.rows) setRows(payload.rows);
-  if (payload.metrics) setMetrics(payload.metrics);
-  if (payload.insights) setInsights(payload.insights);
+export function setMetrics(m: any) {
+  w.__BB_METRICS__ = m;
+}
+export function getMetrics(): any {
+  return w.__BB_METRICS__;
 }
